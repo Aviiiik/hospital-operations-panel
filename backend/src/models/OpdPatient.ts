@@ -1,0 +1,42 @@
+import mongoose from "mongoose";
+
+const opdPatientSchema = new mongoose.Schema({
+  patientId:       { type: String, required: true, unique: true },
+  registrationNo:  { type: String, required: true, unique: true },
+  sequenceNo:      { type: Number, required: true },
+  title:           { type: String, default: "Mr", enum: ["Mr", "Mrs", "Ms", "Dr", "Baby", "Master"] },
+  name:            { type: String, required: true },
+  gender:          { type: String, enum: ["Male", "Female", "Other"], required: true },
+  dob:             { type: Date },
+  ageYears:        { type: Number, default: 0 },
+  ageMonths:       { type: Number, default: 0 },
+  ageDays:         { type: Number, default: 0 },
+  nationality:     { type: String, default: "NATIONAL" },
+  religion:        { type: String },
+  caste:           { type: String },
+  occupation:      { type: String },
+  address:         { type: String },
+  postOffice:      { type: String },
+  policeStation:   { type: String },
+  district:        { type: String },
+  state:           { type: String },
+  pin:             { type: String },
+  phone:           { type: String, required: true },
+  altPhone:        { type: String },
+  email:           { type: String },
+  city:            { type: String },
+  country:         { type: String, default: "India" },
+  referredBy:      { type: String },
+  collCentre:      { type: String },
+  organization:    { type: String },
+  patientHistory:  { type: String },
+  registrationType:   { type: String, enum: ["NATIONAL", "INTERNATIONAL"], default: "NATIONAL" },
+  registrationAmount: { type: Number, default: 100 },
+ 
+  dueAmount:          { type: Number, default: 0 },
+  registrationDate:   { type: Date, default: Date.now },
+  validity:           { type: Date },
+  isActive:           { type: Boolean, default: true },
+}, { timestamps: true });
+
+export default mongoose.model("OpdPatient", opdPatientSchema);
