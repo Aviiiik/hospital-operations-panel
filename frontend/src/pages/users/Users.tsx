@@ -16,7 +16,6 @@ import DeleteConfirmModal from "./components/DeleteConfirmModal";
 interface User {
   _id: string;
   name: string;
-  email: string;
   mobile: string;
   role: string;
   department: string;
@@ -62,7 +61,6 @@ export default function UsersList() {
   useEffect(() => {
     const filtered = users.filter(user =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.role.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -135,7 +133,7 @@ export default function UsersList() {
           <div className="flex flex-col md:flex-row gap-4 justify-between">
             <CardTitle>All Users ({filteredUsers.length})</CardTitle>
             <Input
-              placeholder="Search by name, email, department or role..."
+              placeholder="Search by name, department or role..."
               className="max-w-md"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -149,7 +147,6 @@ export default function UsersList() {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left py-4 px-4">Name</th>
-                  <th className="text-left py-4 px-4">Email</th>
                   <th className="text-left py-4 px-4">Mobile</th>
                   <th className="text-left py-4 px-4">Role</th>
                   <th className="text-left py-4 px-4">Department</th>
@@ -161,7 +158,6 @@ export default function UsersList() {
                 {filteredUsers.map((user) => (
                   <tr key={user._id} className="border-b hover:bg-gray-50">
                     <td className="py-4 px-4 font-medium">{user.name}</td>
-                    <td className="py-4 px-4 text-gray-600">{user.email}</td>
                     <td className="py-4 px-4">{user.mobile}</td>
                     <td className="py-4 px-4">
                       <Badge className={getRoleColor(user.role)}>{user.role}</Badge>

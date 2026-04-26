@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, BookOpen, Eye, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import opdService from "@/services/opdService";
+import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
 import EditPatientModal from "@/components/opd/EditPatientModal";
 import EditBookingModal from "@/components/opd/EditBookingModal";
 
@@ -28,6 +29,7 @@ export default function RegisteredPatient() {
   const navigate = useNavigate();
 
   const [search,   setSearch]   = useState({ name: "", phone: "", patientId: "", registrationNo: "" });
+  const [preset,   setPreset]   = useState<DatePreset | null>("today");
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
@@ -46,14 +48,10 @@ export default function RegisteredPatient() {
   const [editBookingId, setEditBookingId] = useState<string | null>(null);
   const [showEditBooking, setShowEditBooking] = useState(false);
 
-  const handleSearch = async () => {
-    const { name, phone, patientId, registrationNo } = search;
-    if (!name && !phone && !patientId && !registrationNo) {
-      return toast.error("Enter at least one search criterion");
-    }
+  const fetchPatients = async (params: Record<string, string>) => {
     setLoading(true);
     try {
-      const res = await opdService.searchPatients({ name, phone, patientId, registrationNo });
+      const res = await opdService.searchPatients(params);
       setPatients(res.data.data.patients);
       setSearched(true);
     } catch {
@@ -61,6 +59,30 @@ export default function RegisteredPatient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const { from, to } = getDateRange("today");
+    fetchPatients({ from: from.toISOString(), to: to.toISOString() });
+  }, []);
+
+  // Text search — no date filter; deactivates any preset
+  const handleSearch = () => {
+    const params = Object.fromEntries(
+      Object.entries(search).filter(([, v]) => v.trim() !== "")
+    );
+    if (Object.keys(params).length === 0) return;
+    setPreset(null);
+    fetchPatients(params);
+  };
+
+  // Preset — date filter only; clears text search
+  const handlePresetChange = (p: DatePreset) => {
+    const cleared = { name: "", phone: "", patientId: "", registrationNo: "" };
+    setSearch(cleared);
+    setPreset(p);
+    const { from, to } = getDateRange(p);
+    fetchPatients({ from: from.toISOString(), to: to.toISOString() });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };
@@ -86,10 +108,10 @@ export default function RegisteredPatient() {
     setShowEditPatient(true);
   };
 
-  const handleEditBooking = (booking: Booking) => {
-    setEditBookingId(booking._id);
-    setShowEditBooking(true);
-  };
+  // const handleEditBooking = (booking: Booking) => {
+  //   setEditBookingId(booking._id);
+  //   setShowEditBooking(true);
+  // };
 
   const handlePatientSaved = (updated: any) => {
     setPatients(prev => prev.map(p => p._id === updated._id ? { ...p, ...updated } : p));
@@ -113,7 +135,11 @@ export default function RegisteredPatient() {
       {/* Search form */}
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Search Patient</CardTitle></CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-xs mb-2 block">Date Filter</Label>
+            <DatePresetFilter value={preset} onChange={handlePresetChange} />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1">
               <Label className="text-xs">Patient Name</Label>
@@ -132,8 +158,14 @@ export default function RegisteredPatient() {
               <Input value={search.patientId} onChange={s("patientId")} onKeyDown={handleKeyDown} placeholder="e.g. OPD260400150" className="h-9 text-sm" />
             </div>
           </div>
-          <div className="flex justify-end mt-4 gap-2">
-            <Button variant="outline" onClick={() => { setSearch({ name:"", phone:"", patientId:"", registrationNo:"" }); setPatients([]); setSearched(false); }}>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              const cleared = { name: "", phone: "", patientId: "", registrationNo: "" };
+              setSearch(cleared);
+              setPreset("today");
+              const { from, to } = getDateRange("today");
+              fetchPatients({ from: from.toISOString(), to: to.toISOString() });
+            }}>
               Clear
             </Button>
             <Button onClick={handleSearch} className="bg-red-600 hover:bg-red-700" disabled={loading}>
@@ -150,6 +182,7 @@ export default function RegisteredPatient() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-gray-600">
               {patients.length > 0 ? `${patients.length} patient(s) found` : "No patients found"}
+              {loading && <span className="ml-2 text-gray-400 font-normal">Loading...</span>}
             </CardTitle>
           </CardHeader>
           {patients.length > 0 && (
@@ -234,12 +267,12 @@ export default function RegisteredPatient() {
                           {b.status}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2">
+                      {/* <td className="px-3 py-2">
                         <Button size="sm" variant="outline" className="h-7 text-xs text-amber-600 border-amber-300 hover:bg-amber-50"
                           onClick={() => handleEditBooking(b)}>
                           <Pencil className="h-3 w-3 mr-1" /> Edit
                         </Button>
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>

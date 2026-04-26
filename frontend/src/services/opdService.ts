@@ -7,33 +7,6 @@ export const REGISTRATION_TYPES = [
   { type: "INTERNATIONAL", amount: 500 },
 ];
 
-export const OPD_DOCTORS = [
-  { name: "GOUTAM GHOSH",        department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 500 },
-  { name: "DEBARCHAN GHOSH",     department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 500 },
-  { name: "BHASKAR SINHA",       department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "SAIKAT SARKAR",       department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "SOUMYA GAYEN",        department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "ANIS HAZRA",          department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "RAJESH JINDEL",       department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 500 },
-  { name: "K. C. MALLICK",       department: "OPD", designation: "CARDIOLOGIST", fees: 600 },
-  { name: "ACHYUT ROY CHOUDHURI",department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "MONICA SHAH",         department: "OPD", designation: "GYNAECOLOGIST & OBSTETRICIAN", fees: 500 },
-  { name: "ARJUN ROY",           department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "DEEP DAS",            department: "OPD", designation: "SPECIALIST", fees: 600 },
-  { name: "ARCOJIT GHOSH",       department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "TAPAS LAHA",          department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "SANJAY SEN",          department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "SOURAV BASU",         department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "ANUPHAV GOSWAMI",     department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "SOUMYA DAS",          department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "NIRDESH TIWARI",      department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 500 },
-  { name: "PIYALI CHATTOPADHYA", department: "OPD", designation: "GYNAECOLOGIST & OBSTETRICIAN", fees: 500 },
-  { name: "ASISH KR. SINGH",     department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "JANITA CHAKRABORTY SARKAR", department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "KAUSIK KUMAR CONAR",  department: "OPD", designation: "GENERAL PHYSICIAN (GP)", fees: 400 },
-  { name: "AMITAVA DAS",         department: "OPD", designation: "CARDIOLOGIST", fees: 600 },
-];
-
 export const DESIGNATIONS = [
   "ADV PHACO SURGERY, GLAUCOMA SURGERY", "ANESTHETIST", "CARDIOLOGIST",
   "CARDIOLOGIST & MEDICINE", "CHEST MEDICINE", "CHILD SPECIALIST",
@@ -48,8 +21,6 @@ export const DESIGNATIONS = [
   "PSYCHIATRY", "PULMONOLOGIST", "RADIOLOGIST", "RMO",
   "SENIOR MEDICAL OFFICER", "SKIN SPECIALIST", "SURGEON", "UROLOGIST", "VASCULAR",
 ];
-// Add this to opdService.ts
-
 export const OPD_SERVICES = [
   { serviceName: "P. ENEMA", charge: 400 },
   { serviceName: "FINGERING ENEMA", charge: 900 },
@@ -131,6 +102,9 @@ export const MEDICINES = [
 ];
 
 const opdService = {
+  getDoctors:         ()          => api.get("/opd/doctors"),
+  getDashboardStats:  ()          => api.get("/opd/stats/dashboard"),
+  getTodayActivity:   ()          => api.get("/opd/stats/today-activity"),
   getNextId:          ()          => api.get("/opd/patients/next-id"),
   createPatient:      (data: any) => api.post("/opd/patients", data),
   updatePatient:      (id: string, data: any) => api.put(`/opd/patients/${id}`, data),

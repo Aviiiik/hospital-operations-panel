@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Printer, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import opdService, { OPD_DOCTORS, DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
+import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
 
 interface ServiceItem { serviceName: string; charge: number; }
 
@@ -38,6 +38,8 @@ export interface PreviousBooking {
   billAmount: number;
   status: string;
 }
+
+interface Doctor { _id: string; name: string; department: string; designation: string; fees: number; }
 
 interface Props {
   patient: OpdPatient;
@@ -184,6 +186,16 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
     ? existingBookings[0].doctorName 
     : "";
 
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  useEffect(() => {
+    opdService.getDoctors().then(r =>
+      setDoctors(r.data.data.doctors.map((d: any) => ({
+        _id: d._id, name: d.name, department: d.department,
+        designation: d.specialization || "", fees: Number(d.consultancyFees) || 0,
+      })))
+    );
+  }, []);
+
   const [department,      setDepartment]      = useState("OPD");
   const [doctorName,      setDoctorName]      = useState("");
   const [referredBy,      setReferredBy]      = useState(lastDoctor || patient.referredBy || "");
@@ -196,7 +208,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
   const [saving,          setSaving]          = useState(false);
   const [savedBooking,    setSavedBooking]    = useState<any>(null);
 
-  const filteredDoctors = OPD_DOCTORS.filter(d => d.department === department);
+  const filteredDoctors = doctors.filter(d => d.department === department);
   const totalAmount     = services.reduce((s, r) => s + (Number(r.charge) || 0), 0);
   
   const regFee = isNewRegistration ? (patient.registrationAmount || 0) : 0;
@@ -204,7 +216,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
 
   const handleDoctorChange = (name: string) => {
     setDoctorName(name);
-    const doc = OPD_DOCTORS.find(d => d.name === name);
+    const doc = doctors.find(d => d.name === name);
     if (doc) setServices([{ serviceName: "CONSULTATION", charge: doc.fees }]);
   };
 
@@ -351,7 +363,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
                   <Select value={referredBy} onValueChange={setReferredBy}>
                     <SelectTrigger><SelectValue placeholder="-- Select Doctor --" /></SelectTrigger>
                     <SelectContent>
-                      {OPD_DOCTORS.map(d => (
+                      {doctors.map(d => (
                         <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -399,7 +411,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
             // 3. Update BOTH the name and the charge for this specific row
             updated[idx] = { 
               serviceName: val, 
-              charge: selected ? selected.charge : (val === "CONSULTATION" ? (OPD_DOCTORS.find(d => d.name === doctorName)?.fees || 0) : 0)
+              charge: selected ? selected.charge : (val === "CONSULTATION" ? (doctors.find(d => d.name === doctorName)?.fees || 0) : 0)
             };
             
             // 4. Save the updated array back to state

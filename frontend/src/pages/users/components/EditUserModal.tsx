@@ -17,7 +17,6 @@ interface User {
   _id: string;
   name: string;
   username: string;
-  email: string;
   mobile: string;
   role: string;
   department: string;
@@ -37,7 +36,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
   const [formData, setFormData] = useState({
     name: "",
     username: "",
-    email: "",
     mobile: "",
     role: "",
     department: "",
@@ -48,7 +46,7 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
   const [loading, setLoading] = useState(false);
 
   const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant"];
-  const departments = ["Cardiology", "Neurology", "Pediatrics", "Gynecology", "Orthopedics", "General Medicine", "Emergency", "Administration", "Pharmacy", "Laboratory"];
+  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE"];
   const shifts = ["Morning (6AM-2PM)", "Evening (2PM-10PM)", "Night (10PM-6AM)", "General Shift"];
 
   useEffect(() => {
@@ -56,7 +54,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
       setFormData({
         name: user.name,
         username: user.username,
-        email: user.email,
         mobile: user.mobile,
         role: user.role,
         department: user.department,
@@ -100,10 +97,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
             <div>
               <Label>Username</Label>
               <Input value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
             </div>
             <div>
               <Label>Mobile</Label>

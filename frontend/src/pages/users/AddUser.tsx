@@ -17,7 +17,6 @@ export default function AddUser() {
   const [formData, setFormData] = useState({
     name: "",
     username: "",
-    email: "",
     mobile: "",
     password: "",
     role: "",
@@ -25,13 +24,11 @@ export default function AddUser() {
     specialization: "",
     shift: "",
     licenseNumber: "",
+    consultancyFees: "",
   });
 
   const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant"];
-  const departments = [
-    "Cardiology", "Neurology", "Pediatrics", "Gynecology", "Orthopedics",
-    "General Medicine", "Emergency", "Administration", "Pharmacy", "Laboratory"
-  ];
+  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE"];
 
   const shifts = ["Morning (6AM-2PM)", "Evening (2PM-10PM)", "Night (10PM-6AM)", "General Shift"];
 
@@ -57,7 +54,7 @@ export default function AddUser() {
     e.preventDefault();
 
     // Basic validation
-    if (!formData.name || !formData.username || !formData.email || !formData.mobile || !formData.password ||
+    if (!formData.name || !formData.username || !formData.mobile || !formData.password ||
         !formData.role || !formData.department) {
       toast.error("Please fill all required fields");
       return;
@@ -120,19 +117,6 @@ export default function AddUser() {
                   value={formData.username}
                   onChange={handleChange}
                   placeholder="rajesh.kumar"
-                  required
-                />
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label>Email Address <span className="text-red-500">*</span></Label>
-                <Input
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="rajesh.kumar@citycare.in"
                   required
                 />
               </div>
@@ -214,6 +198,17 @@ export default function AddUser() {
                   value={formData.licenseNumber}
                   onChange={handleChange}
                   placeholder="MCI-12345"
+                />
+              </div>
+
+              {/* Consultancy Fees */}
+              <div className="space-y-2">
+                <Label>Consultancy Fees (₹)</Label>
+                <Input
+                  name="consultancyFees"
+                  value={formData.consultancyFees}
+                  onChange={handleChange}
+                  placeholder="e.g. 500"
                 />
               </div>
 

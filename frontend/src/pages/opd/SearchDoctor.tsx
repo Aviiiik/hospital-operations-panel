@@ -1,25 +1,37 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
-import { OPD_DOCTORS, DEPARTMENTS, DESIGNATIONS } from "@/services/opdService";
+import opdService, { DEPARTMENTS, DESIGNATIONS } from "@/services/opdService";
+
+interface Doctor { _id: string; name: string; department: string; designation: string; fees: number; }
 
 export default function SearchDoctor() {
   const [nameFilter,   setNameFilter]   = useState("");
   const [deptFilter,   setDeptFilter]   = useState("ALL");
   const [desigFilter,  setDesigFilter]  = useState("ALL");
+  const [doctors,      setDoctors]      = useState<Doctor[]>([]);
+
+  useEffect(() => {
+    opdService.getDoctors().then(r =>
+      setDoctors(r.data.data.doctors.map((d: any) => ({
+        _id: d._id, name: d.name, department: d.department,
+        designation: d.specialization || "", fees: Number(d.consultancyFees) || 0,
+      })))
+    );
+  }, []);
 
   const filtered = useMemo(() => {
-    return OPD_DOCTORS.filter(d => {
+    return doctors.filter(d => {
       const matchName  = !nameFilter || d.name.toLowerCase().includes(nameFilter.toLowerCase());
       const matchDept  = deptFilter  === "ALL" || d.department === deptFilter;
       const matchDesig = desigFilter === "ALL" || d.designation === desigFilter;
       return matchName && matchDept && matchDesig;
     });
-  }, [nameFilter, deptFilter, desigFilter]);
+  }, [doctors, nameFilter, deptFilter, desigFilter]);
 
   return (
     <div className="space-y-6">

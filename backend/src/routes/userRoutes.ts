@@ -8,15 +8,11 @@ const router = express.Router();
 // Create New User
 router.post("/", async (req, res) => {
   try {
-    const { name, username, email, password, mobile, role, department, specialization, shift, licenseNumber } = req.body;
+    const { name, username, password, mobile, role, department, specialization, shift, licenseNumber, consultancyFees } = req.body;
 
     const existingUsername = await User.findOne({ username });
     if (existingUsername) {
       return res.status(400).json({ message: "User with this username already exists" });
-    }
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User with this email already exists" });
     }
     const existingMobile = await User.findOne({ mobile });
     if (existingMobile) {
@@ -28,7 +24,6 @@ router.post("/", async (req, res) => {
     const user = await User.create({
       name,
       username,
-      email,
       password: hashedPassword,
       mobile,
       role,
@@ -36,6 +31,7 @@ router.post("/", async (req, res) => {
       specialization,
       shift,
       licenseNumber,
+      consultancyFees,
     });
 
     res.status(201).json({
@@ -79,11 +75,11 @@ router.get("/:id", async (req, res) => {
 // Update User
 router.put("/:id", async (req, res) => {
   try {
-    const { name, username, email, mobile, role, department, specialization, shift, licenseNumber } = req.body;
+    const { name, username, mobile, role, department, specialization, shift, licenseNumber, consultancyFees } = req.body;
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { name, username, email, mobile, role, department, specialization, shift, licenseNumber },
+      { name, username, mobile, role, department, specialization, shift, licenseNumber, consultancyFees },
       { new: true, runValidators: true }
     ).select("-password");
 

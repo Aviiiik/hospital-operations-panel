@@ -12,7 +12,6 @@ import { Separator } from "@/components/ui/separator";
 interface User {
   _id: string;
   name: string;
-  email: string;
   mobile: string;
   role: string;
   department: string;
@@ -48,8 +47,6 @@ export default function ViewUserModal({ isOpen, onClose, user }: ViewUserModalPr
               </span>
             </div>
             <h3 className="text-2xl font-semibold tracking-tight">{user.name}</h3>
-            <p className="text-muted-foreground mt-1">{user.email}</p>
-            
             <Badge 
               variant={user.isActive ? "default" : "secondary"} 
               className="mt-3 px-4 py-1"

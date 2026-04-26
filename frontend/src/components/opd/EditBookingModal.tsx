@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import opdService, { OPD_DOCTORS, DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
+import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
+
+interface Doctor { _id: string; name: string; department: string; fees: number; }
 
 interface ServiceItem { serviceName: string; charge: number; }
 
@@ -23,6 +25,16 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+
+  useEffect(() => {
+    opdService.getDoctors().then(r =>
+      setDoctors(r.data.data.doctors.map((d: any) => ({
+        _id: d._id, name: d.name, department: d.department,
+        fees: Number(d.consultancyFees) || 0,
+      })))
+    );
+  }, []);
 
   useEffect(() => {
     if (open && bookingId) {
@@ -48,7 +60,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
   };
 
   const handleDoctorChange = (name: string) => {
-    const doc = OPD_DOCTORS.find(d => d.name === name);
+    const doc = doctors.find(d => d.name === name);
     setForm((f: any) => {
       const svcs: ServiceItem[] = f.services || [];
       const updated = svcs.length > 0
@@ -58,7 +70,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
     });
   };
 
-  const filteredDoctors = OPD_DOCTORS.filter(d => d.department === form?.department);
+  const filteredDoctors = doctors.filter(d => d.department === form?.department);
 
   const handleSave = async () => {
     if (!form.doctorName) return toast.error("Please select a doctor");
@@ -159,7 +171,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
                             const selected = OPD_SERVICES.find(os => os.serviceName === val);
                             const updated = services.map((sv, i) => i === idx ? {
                               serviceName: val,
-                              charge: selected ? selected.charge : (val === "CONSULTATION" ? (OPD_DOCTORS.find(d => d.name === form.doctorName)?.fees || 0) : 0),
+                              charge: selected ? selected.charge : (val === "CONSULTATION" ? (doctors.find(d => d.name === form.doctorName)?.fees || 0) : 0),
                             } : sv);
                             setField("services", updated);
                           }}>

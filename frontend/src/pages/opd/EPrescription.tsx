@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Printer, CheckCircle2, Search, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import opdService, { OPD_DOCTORS, MEDICINES } from "@/services/opdService";
+import opdService, { MEDICINES } from "@/services/opdService";
 
 const FREQUENCIES = [
   "1-0-0 (OD Morning)", "0-1-0 (OD Afternoon)", "0-0-1 (OD Night)",
@@ -162,6 +162,13 @@ export default function EPrescription() {
   const [remarks,          setRemarks]          = useState("");
   const [saving,           setSaving]           = useState(false);
   const [savedPrescription, setSavedPrescription] = useState<any>(null);
+  const [doctors,          setDoctors]          = useState<{ name: string }[]>([]);
+
+  useEffect(() => {
+    opdService.getDoctors().then(r =>
+      setDoctors(r.data.data.doctors.map((d: any) => ({ name: d.name })))
+    );
+  }, []);
 
   const sf = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setSearchForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -357,7 +364,7 @@ export default function EPrescription() {
                   <Select value={doctorName} onValueChange={setDoctorName}>
                     <SelectTrigger><SelectValue placeholder="-- Select Doctor --" /></SelectTrigger>
                     <SelectContent>
-                      {OPD_DOCTORS.map(d => (
+                      {doctors.map(d => (
                         <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
