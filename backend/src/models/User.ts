@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
     enum: ["Admin", "Doctor", "Nurse", "Receptionist", "LabTech", "Pharmacist", "Accountant"],
     required: true 
   },
-  department: { type: String, required: true },
+  department: { type: String },
   specialization: String,
   shift: String,
   licenseNumber: String,

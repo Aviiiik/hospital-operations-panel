@@ -4,46 +4,71 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
-import opdService, { DEPARTMENTS, DESIGNATIONS } from "@/services/opdService";
+import { Button } from "@/components/ui/button";
+import { Search, Edit } from "lucide-react";
+import opdService, { DEPARTMENTS } from "@/services/opdService";
+import EditUserModal from "@/pages/users/components/EditUserModal";
 
-interface Doctor { _id: string; name: string; department: string; designation: string; fees: number; }
+interface Doctor {
+  _id: string;
+  name: string;
+  username: string;
+  mobile: string;
+  role: string;
+  department: string;
+  specialization?: string;
+  shift?: string;
+  licenseNumber?: string;
+  consultancyFees?: string;
+  fees: number;
+}
 
 export default function SearchDoctor() {
-  const [nameFilter,   setNameFilter]   = useState("");
-  const [deptFilter,   setDeptFilter]   = useState("ALL");
-  const [desigFilter,  setDesigFilter]  = useState("ALL");
-  const [doctors,      setDoctors]      = useState<Doctor[]>([]);
+  const [nameFilter, setNameFilter] = useState("");
+  const [deptFilter, setDeptFilter] = useState("ALL");
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchDoctors = () => {
     opdService.getDoctors().then(r =>
       setDoctors(r.data.data.doctors.map((d: any) => ({
-        _id: d._id, name: d.name, department: d.department,
-        designation: d.specialization || "", fees: Number(d.consultancyFees) || 0,
+        _id: d._id,
+        name: d.name,
+        username: d.username || "",
+        mobile: d.mobile || "",
+        role: d.role || "Doctor",
+        department: d.department || "",
+        specialization: d.specialization || "",
+        shift: d.shift || "",
+        licenseNumber: d.licenseNumber || "",
+        consultancyFees: d.consultancyFees || "",
+        fees: Number(d.consultancyFees) || 0,
       })))
     );
-  }, []);
+  };
+
+  useEffect(() => { fetchDoctors(); }, []);
 
   const filtered = useMemo(() => {
     return doctors.filter(d => {
-      const matchName  = !nameFilter || d.name.toLowerCase().includes(nameFilter.toLowerCase());
-      const matchDept  = deptFilter  === "ALL" || d.department === deptFilter;
-      const matchDesig = desigFilter === "ALL" || d.designation === desigFilter;
-      return matchName && matchDept && matchDesig;
+      const matchName = !nameFilter || d.name.toLowerCase().includes(nameFilter.toLowerCase());
+      const matchDept = deptFilter === "ALL" || d.department === deptFilter;
+      return matchName && matchDept;
     });
-  }, [doctors, nameFilter, deptFilter, desigFilter]);
+  }, [doctors, nameFilter, deptFilter]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Search Doctor</h1>
-        <p className="text-gray-500 text-sm">Find doctors by name, department or designation</p>
+        <p className="text-gray-500 text-sm">Find doctors by name or department</p>
       </div>
 
       {/* Filters */}
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-xs">Doctor Name</Label>
               <div className="relative">
@@ -67,17 +92,6 @@ export default function SearchDoctor() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Designation</Label>
-              <Select value={desigFilter} onValueChange={setDesigFilter}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">-- All Designations --</SelectItem>
-                  {DESIGNATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -97,28 +111,36 @@ export default function SearchDoctor() {
                   <th className="text-left px-4 py-3">SL</th>
                   <th className="text-left px-4 py-3">DOCTOR NAME</th>
                   <th className="text-left px-4 py-3">DEPARTMENT</th>
-                  <th className="text-left px-4 py-3">DESIGNATION</th>
+                  <th className="text-left px-4 py-3">MOBILE</th>
+                  <th className="text-left px-4 py-3">SHIFT</th>
                   <th className="text-right px-4 py-3">CONSULT FEES</th>
-                  <th className="text-left px-4 py-3">SCHEDULE</th>
+                  <th className="text-center px-4 py-3">ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-gray-400">No doctors found</td>
+                    <td colSpan={7} className="text-center py-10 text-gray-400">No doctors found</td>
                   </tr>
                 ) : (
                   filtered.map((doc, i) => (
-                    <tr key={doc.name} className={`border-t ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors`}>
+                    <tr key={doc._id} className={`border-t ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors`}>
                       <td className="px-4 py-3 text-gray-400">{i + 1}</td>
                       <td className="px-4 py-3 font-medium">{doc.name}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs">{doc.department}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{doc.designation}</td>
+                      <td className="px-4 py-3 text-gray-600">{doc.mobile || "—"}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">{doc.shift || "—"}</td>
                       <td className="px-4 py-3 text-right font-semibold">₹{doc.fees}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">EVERYDAY · MORNING</span>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setSelectedDoctor(doc); setIsEditOpen(true); }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -128,6 +150,13 @@ export default function SearchDoctor() {
           </div>
         </CardContent>
       </Card>
+
+      <EditUserModal
+        isOpen={isEditOpen}
+        onClose={() => { setIsEditOpen(false); setSelectedDoctor(null); }}
+        user={selectedDoctor}
+        onSuccess={fetchDoctors}
+      />
     </div>
   );
 }

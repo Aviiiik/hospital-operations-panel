@@ -9,7 +9,7 @@ export const getRandomThreeDigits = () => Math.floor(100 + Math.random() * 900).
 
 export async function getDoctors() {
   return User.find({ role: "Doctor", isActive: true })
-    .select("name department specialization consultancyFees")
+    .select("name username mobile department specialization shift licenseNumber consultancyFees")
     .sort({ name: 1 });
 }
 

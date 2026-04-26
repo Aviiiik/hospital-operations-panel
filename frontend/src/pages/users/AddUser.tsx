@@ -28,9 +28,9 @@ export default function AddUser() {
   });
 
   const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant"];
-  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE"];
+  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE","Administration", "Pharmacy","Reception"];
 
-  const shifts = ["Morning (6AM-2PM)", "Evening (2PM-10PM)", "Night (10PM-6AM)", "General Shift"];
+  const shifts = ["Morning", "Evening", "Night", "General Shift"];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -151,7 +151,7 @@ export default function AddUser() {
 
               {/* Department */}
               <div className="space-y-2">
-                <Label>Department <span className="text-red-500">*</span></Label>
+                <Label>Department<span className="text-red-500">*</span> </Label>
                 <Select onValueChange={(value) => handleSelectChange("department", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select Department" />

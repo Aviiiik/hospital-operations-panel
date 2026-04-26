@@ -23,6 +23,7 @@ interface User {
   specialization?: string;
   shift?: string;
   licenseNumber?: string;
+  consultancyFees?: string;
 }
 
 interface EditUserModalProps {
@@ -42,12 +43,13 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
     specialization: "",
     shift: "",
     licenseNumber: "",
+    consultancyFees: "",
   });
   const [loading, setLoading] = useState(false);
 
   const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant"];
-  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE"];
-  const shifts = ["Morning (6AM-2PM)", "Evening (2PM-10PM)", "Night (10PM-6AM)", "General Shift"];
+  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE","Administration", "Pharmacy","Reception"];
+  const shifts = ["Morning ", "Evening ", "Night ", "General Shift"];
 
   useEffect(() => {
     if (user) {
@@ -60,6 +62,7 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
         specialization: user.specialization || "",
         shift: user.shift || "",
         licenseNumber: user.licenseNumber || "",
+        consultancyFees: user.consultancyFees || "",
       });
     }
   }, [user]);
@@ -127,6 +130,21 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
             <div>
               <Label>Specialization</Label>
               <Input value={formData.specialization} onChange={(e) => setFormData({ ...formData, specialization: e.target.value })} />
+            </div>
+            <div>
+              <Label>Shift</Label>
+              <Select value={formData.shift} onValueChange={(v) => setFormData({ ...formData, shift: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shifts.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Consulting Fees (₹)</Label>
+              <Input value={formData.consultancyFees} onChange={(e) => setFormData({ ...formData, consultancyFees: e.target.value })} />
             </div>
           </div>
 

@@ -16,6 +16,7 @@ import DeleteConfirmModal from "./components/DeleteConfirmModal";
 interface User {
   _id: string;
   name: string;
+  username: string;
   mobile: string;
   role: string;
   department: string;
@@ -88,7 +89,7 @@ export default function UsersList() {
     try {
       await api.delete(`/users/${userToDelete._id}`);
       toast.success("User deleted successfully");
-      fetchUsers(); // Refresh the list
+      fetchUsers();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete user");
     } finally {
@@ -176,9 +177,9 @@ export default function UsersList() {
                         <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="text-red-600 hover:bg-red-50"
                           onClick={() => handleDeleteClick(user)}
                         >

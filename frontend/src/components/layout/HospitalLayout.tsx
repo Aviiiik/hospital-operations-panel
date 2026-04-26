@@ -5,10 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Users, Bed, Pill,
   DollarSign, Settings, LogOut, Menu, X, Bell,
-  Calendar, UserPlus, UserCheck, Stethoscope, ChevronDown, FileText,
+  Calendar, UserPlus, UserCheck, Stethoscope, ChevronDown, FileText, KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import ChangePasswordModal from "@/pages/users/components/ChangePasswordModal";
 
 interface SubItem { title: string; path: string; icon: React.ElementType; }
 interface NavItem  {
@@ -37,6 +38,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 export default function HospitalLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -149,6 +151,15 @@ export default function HospitalLayout() {
             )}
           </div>
           <Button
+            onClick={() => setIsChangePasswordOpen(true)}
+            variant="ghost"
+            className="w-full justify-start text-gray-600 hover:bg-gray-100"
+            title={!sidebarOpen ? "Change Password" : undefined}
+          >
+            <KeyRound className="h-4 w-4 shrink-0" />
+            {sidebarOpen && <span className="ml-2">Change Password</span>}
+          </Button>
+          <Button
             onClick={logout}
             variant="ghost"
             className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700"
@@ -158,6 +169,12 @@ export default function HospitalLayout() {
             {sidebarOpen && <span className="ml-2">Logout</span>}
           </Button>
         </div>
+
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          user={user}
+        />
       </div>
 
       {/* Main content */}

@@ -10,7 +10,9 @@ router.post("/", async (req, res) => {
   try {
     const { name, username, password, mobile, role, department, specialization, shift, licenseNumber, consultancyFees } = req.body;
 
-    const existingUsername = await User.findOne({ username });
+    const normalizedUsername = username.toLowerCase();
+
+    const existingUsername = await User.findOne({ username: normalizedUsername });
     if (existingUsername) {
       return res.status(400).json({ message: "User with this username already exists" });
     }
@@ -23,7 +25,7 @@ router.post("/", async (req, res) => {
 
     const user = await User.create({
       name,
-      username,
+      username: normalizedUsername,
       password: hashedPassword,
       mobile,
       role,
@@ -79,7 +81,7 @@ router.put("/:id", async (req, res) => {
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { name, username, mobile, role, department, specialization, shift, licenseNumber, consultancyFees },
+      { name, username: username.toLowerCase(), mobile, role, department, specialization, shift, licenseNumber, consultancyFees },
       { new: true, runValidators: true }
     ).select("-password");
 
@@ -90,6 +92,31 @@ router.put("/:id", async (req, res) => {
       message: "User updated successfully",
       data: user,
     });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Change Password
+router.patch("/:id/password", async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { password: hashedPassword },
+      { new: true }
+    ).select("-password");
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json({ success: true, message: "Password updated successfully" });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
