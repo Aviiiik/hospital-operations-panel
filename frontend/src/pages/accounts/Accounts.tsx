@@ -1,11 +1,9 @@
 // src/pages/accounts/Accounts.tsx
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, TrendingUp, TrendingDown, Users, Bed, Pill, TestTube } from "lucide-react";
-import { toast } from "sonner";
+import { DollarSign, TrendingUp, TrendingDown, Users, Bed } from "lucide-react";
 
 interface RevenueData {
   date: string;

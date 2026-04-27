@@ -200,7 +200,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
   const [doctorName,      setDoctorName]      = useState("");
   const [referredBy,      setReferredBy]      = useState(lastDoctor || patient.referredBy || "");
   const [visitDate,       setVisitDate]       = useState(today);
-  const [visitTime,       setVisitTime]       = useState("");
+  const [visitTime,       _setVisitTime]      = useState("");
   const [services,        setServices]        = useState<ServiceItem[]>([{ serviceName: "CONSULTATION", charge: "" as any }]);
   const [cardCharge,      setCardCharge]      = useState("" as any);
   const [discount,        setDiscount]        = useState("" as any);

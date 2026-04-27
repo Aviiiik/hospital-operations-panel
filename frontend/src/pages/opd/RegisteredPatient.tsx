@@ -45,7 +45,7 @@ export default function RegisteredPatient() {
   const [showEditPatient, setShowEditPatient] = useState(false);
 
   // Edit booking modal
-  const [editBookingId, setEditBookingId] = useState<string | null>(null);
+  const [editBookingId, _setEditBookingId] = useState<string | null>(null);
   const [showEditBooking, setShowEditBooking] = useState(false);
 
   const fetchPatients = async (params: Record<string, string>) => {

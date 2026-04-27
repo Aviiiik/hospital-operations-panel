@@ -68,7 +68,7 @@ export default function AddUser() {
     setLoading(true);
 
     try {
-      const response = await api.post("/users", formData);
+      await api.post("/users", formData);
       
       toast.success("User created successfully!");
       navigate("/users");
