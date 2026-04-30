@@ -5,13 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Users, Bed, Pill,
   DollarSign, Settings, LogOut, Menu, X, Bell,
-  Calendar, UserPlus, UserCheck, Stethoscope, ChevronDown, FileText, KeyRound,
+  Calendar, UserPlus, UserCheck, Stethoscope, ChevronDown, FileText, KeyRound, UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import ChangePasswordModal from "@/pages/users/components/ChangePasswordModal";
 
-interface SubItem { title: string; path: string; icon: React.ElementType; }
+interface SubItem { title: string; path: string; icon: React.ElementType; roles?: string[]; }
 interface NavItem  {
   title: string; icon: React.ElementType; path: string;
   roles?: string[]; subItems?: SubItem[];
@@ -27,6 +27,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
       { title: "Registered Patient", path: "/opd/registered",    icon: UserCheck },
       { title: "Search Doctor",      path: "/opd/search-doctor", icon: Stethoscope },
       { title: "E-Prescription",    path: "/opd/e-prescription", icon: FileText },
+      { title: "Add Doctor",        path: "/opd/add-doctor",    icon: UserCog },
     ],
   },
   { title: "IPD",       icon: Bed,          path: "/ipd",        roles: ["admin", "receptionist"] },
@@ -45,7 +46,12 @@ export default function HospitalLayout() {
   if (!user) return <Navigate to="/login" replace />;
 
   const role = user.role.toLowerCase();
-  const navItems = ALL_NAV_ITEMS.filter(item => !item.roles || item.roles.includes(role));
+  const navItems = ALL_NAV_ITEMS
+    .filter(item => !item.roles || item.roles.includes(role))
+    .map(item => ({
+      ...item,
+      subItems: item.subItems?.filter(sub => !sub.roles || sub.roles.includes(role)),
+    }));
 
   const isOpdActive = location.pathname.startsWith("/opd");
 
@@ -98,7 +104,7 @@ export default function HospitalLayout() {
 
                   {showSubs && (
                     <div className="ml-4 mt-1 space-y-0.5 border-l-2 border-red-100 pl-3">
-                      {item.subItems.map(sub => {
+                      {item.subItems!.map(sub => {
                         const subActive = location.pathname === sub.path;
                         return (
                           <Link

@@ -1,11 +1,29 @@
+import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import OpdPatient from "../models/OpdPatient.js";
 import OpdBooking from "../models/OpdBooking.js";
 import OpdPrescription from "../models/OpdPrescription.js";
 
-export const getYear = () => new Date().getFullYear().toString().slice(-2);
+async function getNextMonthlySerial(): Promise<{ year: string; month: string; serial: string }> {
+  const now = new Date();
+  const year = now.getFullYear().toString();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const count = await OpdPatient.countDocuments({ registrationDate: { $gte: monthStart, $lte: monthEnd } });
+  const serial = String(count + 1).padStart(4, "0");
+  return { year, month, serial };
+}
 
-export const getRandomThreeDigits = () => Math.floor(100 + Math.random() * 900).toString();
+async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; serial: string }> {
+  const now = new Date();
+  const shortYear = now.getFullYear().toString().slice(-2);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const yearEnd   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+  const count = await OpdPatient.countDocuments({ registrationDate: { $gte: yearStart, $lte: yearEnd } });
+  const serial = String(count + 1).padStart(5, "0");
+  return { shortYear, serial };
+}
 
 export async function getDoctors() {
   return User.find({ role: "Doctor", isActive: true })
@@ -14,21 +32,16 @@ export async function getDoctors() {
 }
 
 export async function getNextPatientId() {
-  const year = getYear();
-  const randomPart = getRandomThreeDigits();
-  return {
-    year,
-    sequence: 1,
-    registrationNo: `${year}/${randomPart}/001`,
-    patientId: `OPD${year}${randomPart}001`,
-  };
+  const { year, month, serial } = await getNextMonthlySerial();
+  const patientId = `OPD${year}${month}${serial}`;
+  return { patientId };
 }
 
 export async function createPatient(data: any) {
-  const year = getYear();
-  const randomPart = getRandomThreeDigits();
-  const registrationNo = `${year}/${randomPart}/001`;
-  const patientId = `OPD${year}${randomPart}001`;
+  const { year, month, serial: monthSerial } = await getNextMonthlySerial();
+  const patientId = `OPD${year}${month}${monthSerial}`;
+  const { shortYear, serial: regSerial } = await getNextYearlyRegistrationSerial();
+  const registrationNo = `${shortYear}/${regSerial}/001`;
   const validity = new Date();
   validity.setFullYear(validity.getFullYear() + 1);
   return OpdPatient.create({ ...data, patientId, registrationNo, sequenceNo: 1, validity });
@@ -149,4 +162,31 @@ export async function getPatientPrescriptions(patientId: string) {
   const patient = await OpdPatient.findById(patientId);
   if (!patient) throw new Error("Patient not found");
   return OpdPrescription.find({ patient: patient._id }).sort({ createdAt: -1 });
+}
+
+export async function createDoctor(data: any) {
+  const { name, username, mobile, password, department, specialization, shift, licenseNumber, consultancyFees } = data;
+  const normalizedUsername = username.toLowerCase();
+
+  const existingUsername = await User.findOne({ username: normalizedUsername });
+  if (existingUsername) throw new Error("User with this username already exists");
+
+  const existingMobile = await User.findOne({ mobile });
+  if (existingMobile) throw new Error("User with this mobile number already exists");
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  return User.create({
+    name, username: normalizedUsername, password: hashedPassword,
+    mobile, role: "Doctor", department, specialization, shift, licenseNumber, consultancyFees,
+  });
+}
+
+export async function deletePatient(id: string) {
+  const patient = await OpdPatient.findByIdAndDelete(id);
+  if (!patient) throw new Error("Patient not found");
+  await OpdBooking.deleteMany({ patient: patient._id });
+  await OpdPrescription.deleteMany({ patient: patient._id });
+  return patient;
 }

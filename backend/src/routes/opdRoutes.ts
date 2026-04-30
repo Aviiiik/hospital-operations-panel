@@ -1,7 +1,20 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import * as opdService from "../services/opdService.js";
 
 const router = express.Router();
+
+const requireAdmin = (req: any, res: any, next: any) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+  try {
+    const decoded: any = jwt.verify(auth.slice(7), process.env.JWT_SECRET || "fallback_secret");
+    if (decoded.role !== "Admin") return res.status(403).json({ message: "Admin access required" });
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
 
 // GET today's bookings with patient and doctor info
 router.get("/stats/today-activity", async (req, res) => {
@@ -20,6 +33,30 @@ router.get("/stats/dashboard", async (req, res) => {
     res.json({ success: true, data: stats });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+const requireAdminOrReceptionist = (req: any, res: any, next: any) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+  try {
+    const decoded: any = jwt.verify(auth.slice(7), process.env.JWT_SECRET || "fallback_secret");
+    const role = decoded.role?.toLowerCase();
+    if (role !== "admin" && role !== "receptionist") return res.status(403).json({ message: "Access denied" });
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+// POST create doctor — admin or receptionist
+router.post("/doctors", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const doctor = await opdService.createDoctor(req.body);
+    res.status(201).json({ success: true, data: doctor });
+  } catch (err: any) {
+    const status = err.message.includes("already exists") ? 400 : 500;
+    res.status(status).json({ message: err.message });
   }
 });
 
@@ -71,6 +108,17 @@ router.get("/patients/:id", async (req, res) => {
     res.json({ success: true, data: patient });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete patient (and associated bookings/prescriptions)
+router.delete("/patients/:id", async (req, res) => {
+  try {
+    const patient = await opdService.deletePatient(req.params.id);
+    res.json({ success: true, data: patient });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 500;
+    res.status(status).json({ message: err.message });
   }
 });
 

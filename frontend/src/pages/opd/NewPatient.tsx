@@ -41,7 +41,7 @@ const EMPTY_FORM = {
 export default function NewPatient() {
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [nextId, setNextId] = useState<{ year: string; sequence: number; registrationNo: string; patientId: string } | null>(null);
+  const [nextId, setNextId] = useState<{ patientId: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedPatient, setSavedPatient] = useState<OpdPatient | null>(null);
   const [showRegType, setShowRegType] = useState(false);
@@ -125,7 +125,7 @@ export default function NewPatient() {
           <p>Registration Date: <span className="font-medium">{new Date().toLocaleDateString("en-IN")}</span></p>
           {nextId && (
             <p className="font-mono text-sm mt-0.5">
-              Reg No (Next): <span className="font-bold text-gray-800">{nextId.registrationNo}</span>
+              Patient ID (Next): <span className="font-bold text-gray-800">{nextId.patientId}</span>
             </p>
           )}
         </div>

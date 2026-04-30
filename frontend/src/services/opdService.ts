@@ -103,6 +103,7 @@ export const MEDICINES = [
 
 const opdService = {
   getDoctors:         ()          => api.get("/opd/doctors"),
+  createDoctor:       (data: any) => api.post("/opd/doctors", data),
   getDashboardStats:  ()          => api.get("/opd/stats/dashboard"),
   getTodayActivity:   ()          => api.get("/opd/stats/today-activity"),
   getNextId:          ()          => api.get("/opd/patients/next-id"),
@@ -116,6 +117,7 @@ const opdService = {
   getPatientBookings:     (patientId: string) => api.get(`/opd/bookings/patient/${patientId}`),
   createPrescription:     (data: any)         => api.post("/opd/prescriptions", data),
   getPatientPrescriptions:(patientId: string) => api.get(`/opd/prescriptions/patient/${patientId}`),
+  deletePatient:          (id: string)        => api.delete(`/opd/patients/${id}`),
 };
 
 export default opdService;

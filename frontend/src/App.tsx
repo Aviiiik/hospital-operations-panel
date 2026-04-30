@@ -13,6 +13,7 @@ import RegisteredPatient from "./pages/opd/RegisteredPatient";
 import BookingPage       from "./pages/opd/BookingPage";
 import SearchDoctor      from "./pages/opd/SearchDoctor";
 import EPrescription     from "./pages/opd/EPrescription";
+import AddDoctor         from "./pages/opd/AddDoctor";
 
 import Accounts    from "./pages/accounts/Accounts";
 import IpdList     from "./pages/ipd/IpdList";
@@ -53,6 +54,7 @@ function App() {
             <Route path="opd/book/:patientId" element={<OpdGuard><BookingPage /></OpdGuard>} />
             <Route path="opd/search-doctor"   element={<OpdGuard><SearchDoctor /></OpdGuard>} />
             <Route path="opd/e-prescription" element={<OpdGuard><EPrescription /></OpdGuard>} />
+            <Route path="opd/add-doctor"     element={<OpdGuard><AddDoctor /></OpdGuard>} />
 
             {/* IPD */}
             <Route path="ipd" element={<RoleRoute allowed={["admin","receptionist"]}><IpdList /></RoleRoute>} />

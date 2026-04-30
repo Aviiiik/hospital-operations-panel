@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Printer, CheckCircle2 } from "lucide-react";
+import logoUrl from "@/assets/logo.png";
 import { toast } from "sonner";
 import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
 
@@ -90,12 +91,7 @@ function printReceipt(booking: any, patient: OpdPatient) {
     
     <div class="header-container">
       <div class="logo-box">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="#800000" stroke-width="2"/>
-          <rect x="45" y="25" width="10" height="50" fill="#800000"/>
-          <rect x="25" y="45" width="50" height="10" fill="#800000"/>
-          <circle cx="50" cy="50" r="20" fill="none" stroke="#800000" stroke-width="1" stroke-dasharray="2,2"/>
-        </svg>
+        <img src="${window.location.origin}${logoUrl}" style="width:80px;height:80px;object-fit:contain;" />
       </div>
       <div class="header-text">
         <h1 class="hospital-name">AROGYA MATERNITY & NURSING HOME</h1>
