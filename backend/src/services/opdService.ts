@@ -152,7 +152,7 @@ export async function updateBooking(id: string, data: any) {
 export async function createPrescription(patientId: string, prescriptionData: any) {
   const patient = await OpdPatient.findById(patientId);
   if (!patient) throw new Error("Patient not found");
-  const year = getYear();
+  const year = new Date().getFullYear();
   const count = await OpdPrescription.countDocuments();
   const prescriptionId = `RX${year}${String(count + 1).padStart(5, "0")}`;
   return OpdPrescription.create({ ...prescriptionData, patient: patient._id, prescriptionId });
