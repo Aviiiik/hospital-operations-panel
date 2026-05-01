@@ -4,25 +4,45 @@ import OpdPatient from "../models/OpdPatient.js";
 import OpdBooking from "../models/OpdBooking.js";
 import OpdPrescription from "../models/OpdPrescription.js";
 
+// Returns UTC Date objects bounding the start/end of an IST calendar day.
+// offsetDays=0 → today IST, offsetDays=-1 → yesterday IST, etc.
+function istDayBounds(offsetDays = 0): { start: Date; end: Date } {
+  const d = new Date(Date.now() + offsetDays * 86_400_000);
+  const istDate = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
+  return {
+    start: new Date(`${istDate}T00:00:00+05:30`),
+    end:   new Date(`${istDate}T23:59:59.999+05:30`),
+  };
+}
+
+// Returns current year/month in IST (VPS runs UTC so we must convert).
+function istYearMonth(): { year: number; month: number } {
+  const [year, month] = new Date()
+    .toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+    .split("-").map(Number);
+  return { year, month };
+}
+
 async function getNextMonthlySerial(): Promise<{ year: string; month: string; serial: string }> {
-  const now = new Date();
-  const year = now.getFullYear().toString();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const { year, month } = istYearMonth();
+  const monthStart = new Date(`${year}-${String(month).padStart(2, "0")}-01T00:00:00+05:30`);
+  const nextMonth  = month === 12 ? 1 : month + 1;
+  const nextYear   = month === 12 ? year + 1 : year;
+  const monthEnd   = new Date(`${nextYear}-${String(nextMonth).padStart(2, "0")}-01T00:00:00+05:30`);
+  monthEnd.setMilliseconds(monthEnd.getMilliseconds() - 1);
   const count = await OpdPatient.countDocuments({ registrationDate: { $gte: monthStart, $lte: monthEnd } });
   const serial = String(count + 1).padStart(4, "0");
-  return { year, month, serial };
+  return { year: String(year), month: String(month).padStart(2, "0"), serial };
 }
 
 async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; serial: string }> {
-  const now = new Date();
-  const shortYear = now.getFullYear().toString().slice(-2);
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const yearEnd   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+  const { year } = istYearMonth();
+  const yearStart = new Date(`${year}-01-01T00:00:00+05:30`);
+  const yearEnd   = new Date(`${year + 1}-01-01T00:00:00+05:30`);
+  yearEnd.setMilliseconds(yearEnd.getMilliseconds() - 1);
   const count = await OpdPatient.countDocuments({ registrationDate: { $gte: yearStart, $lte: yearEnd } });
   const serial = String(count + 1).padStart(5, "0");
-  return { shortYear, serial };
+  return { shortYear: String(year).slice(-2), serial };
 }
 
 export async function getDoctors() {
@@ -69,9 +89,7 @@ export async function searchPatients(query: {
 }
 
 export async function getTodayActivity() {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const todayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const { start: todayStart, end: todayEnd } = istDayBounds(0);
   return OpdBooking.find({ createdAt: { $gte: todayStart, $lte: todayEnd } })
     .populate("patient", "name patientId phone")
     .sort({ createdAt: -1 })
@@ -79,11 +97,8 @@ export async function getTodayActivity() {
 }
 
 export async function getDashboardStats() {
-  const now = new Date();
-  const todayStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const todayEnd    = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  const yestStart   = new Date(todayStart); yestStart.setDate(yestStart.getDate() - 1);
-  const yestEnd     = new Date(todayEnd);   yestEnd.setDate(yestEnd.getDate() - 1);
+  const { start: todayStart, end: todayEnd } = istDayBounds(0);
+  const { start: yestStart,  end: yestEnd  } = istDayBounds(-1);
 
   const [todayAdmissions, yestAdmissions, todayRevAgg, yestRevAgg] = await Promise.all([
     OpdBooking.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
@@ -152,7 +167,7 @@ export async function updateBooking(id: string, data: any) {
 export async function createPrescription(patientId: string, prescriptionData: any) {
   const patient = await OpdPatient.findById(patientId);
   if (!patient) throw new Error("Patient not found");
-  const year = new Date().getFullYear();
+  const { year } = istYearMonth();
   const count = await OpdPrescription.countDocuments();
   const prescriptionId = `RX${year}${String(count + 1).padStart(5, "0")}`;
   return OpdPrescription.create({ ...prescriptionData, patient: patient._id, prescriptionId });

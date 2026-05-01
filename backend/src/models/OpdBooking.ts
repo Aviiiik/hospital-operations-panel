@@ -15,10 +15,11 @@ const opdBookingSchema = new mongoose.Schema({
   visitTime:      { type: String },
   serviceType:    { type: String, default: "CONSULTATION" },
   services:       [serviceItemSchema],
-  totalAmount:    { type: Number, default: 0 },
-  cardCharge:     { type: Number, default: 0 },
-  discount:       { type: Number, default: 0 },
-  billAmount:     { type: Number, default: 0 },
+  totalAmount:        { type: Number, default: 0 },
+  registrationAmount: { type: Number, default: 0 },
+  cardCharge:         { type: Number, default: 0 },
+  discount:           { type: Number, default: 0 },
+  billAmount:         { type: Number, default: 0 },
   
  
   status:         { type: String, enum: ["Paid", "Pending", "Cancelled"], default: "Paid" },

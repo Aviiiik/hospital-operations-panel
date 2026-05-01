@@ -146,7 +146,7 @@ function printPrescription(prescription: any, patient: Patient) {
 }
 
 export default function EPrescription() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   // Search state
   const [searchForm, setSearchForm] = useState({ name: "", phone: "", patientId: "", registrationNo: "" });

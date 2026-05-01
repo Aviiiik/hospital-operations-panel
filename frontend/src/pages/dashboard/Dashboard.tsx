@@ -37,7 +37,7 @@ function formatRevenue(n: number) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
 }
 
 const STATUS_STYLE: Record<string, string> = {

@@ -26,7 +26,7 @@ interface Booking {
   bookingId: string; department: string; doctorName: string;
   visitDate: string; serviceType: string;
   services: { serviceName: string; charge: number }[];
-  totalAmount: number; cardCharge: number; discount: number;
+  totalAmount: number; registrationAmount: number; cardCharge: number; discount: number;
   billAmount: number; status: string; remarks?: string;
 }
 
@@ -138,7 +138,7 @@ export default function RegisteredPatient() {
     const win = window.open("", "_blank", "width=720,height=640");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head>
-    <title>OPD Receipt – ${b.bookingId}</title>
+    <title>OPD Receipt – ${patient.patientId}</title>
     <style>
       body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; font-size: 12px; color: #333; }
       .header-container { display: flex; align-items: center; border-bottom: 2px solid #800000; padding-bottom: 10px; margin-bottom: 20px; }
@@ -217,6 +217,7 @@ export default function RegisteredPatient() {
     <div class="amt-section">
       <table class="amt-table">
         <tr><td>Total Service Amount</td><td style="text-align:right;">₹${Number(b.totalAmount).toFixed(2)}</td></tr>
+        ${b.registrationAmount > 0 ? `<tr><td>Registration Fee</td><td style="text-align:right;">₹${Number(b.registrationAmount).toFixed(2)}</td></tr>` : ""}
         ${b.cardCharge > 0 ? `<tr><td>Card Charges</td><td style="text-align:right;">₹${Number(b.cardCharge).toFixed(2)}</td></tr>` : ""}
         ${b.discount > 0 ? `<tr style="color:green;"><td>Discount Allowed (${b.discount}%)</td><td style="text-align:right;">- ₹${((b.discount / 100) * b.totalAmount).toFixed(2)}</td></tr>` : ""}
         <tr class="bold-row"><td>Net Bill Amount</td><td style="text-align:right;">₹${Number(b.billAmount).toFixed(2)}</td></tr>

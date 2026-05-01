@@ -54,7 +54,7 @@ function printReceipt(booking: any, patient: OpdPatient) {
   if (!win) return;
   
   win.document.write(`<!DOCTYPE html><html><head>
-    <title>OPD Receipt – ${booking.bookingId}</title>
+    <title>OPD Receipt – ${patient.patientId}</title>
     <style>
       body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; font-size: 12px; color: #333; }
       
@@ -150,6 +150,7 @@ function printReceipt(booking: any, patient: OpdPatient) {
     <div class="amt-section">
       <table class="amt-table">
         <tr><td>Total Service Amount</td><td style="text-align:right;">₹${Number(booking.totalAmount).toFixed(2)}</td></tr>
+        ${booking.registrationAmount > 0 ? `<tr><td>Registration Fee</td><td style="text-align:right;">₹${Number(booking.registrationAmount).toFixed(2)}</td></tr>` : ""}
         ${booking.cardCharge > 0 ? `<tr><td>Card Charges</td><td style="text-align:right;">₹${Number(booking.cardCharge).toFixed(2)}</td></tr>` : ""}
         ${booking.discount > 0 ? `<tr style="color:green;"><td>Discount Allowed (${booking.discount}%)</td><td style="text-align:right;">- ₹${((booking.discount / 100) * booking.totalAmount).toFixed(2)}</td></tr>` : ""}
         <tr class="bold-row"><td>Net Bill Amount</td><td style="text-align:right;">₹${Number(booking.billAmount).toFixed(2)}</td></tr>
@@ -235,11 +236,12 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
         referredBy,
         department, doctorName, visitDate, visitTime,
         serviceType: services[0]?.serviceName || "CONSULTATION",
-        services: services.map(s => ({ ...s, charge: Number(s.charge) || 0 })), 
-        totalAmount, 
-        cardCharge: Number(cardCharge) || 0, 
+        services: services.map(s => ({ ...s, charge: Number(s.charge) || 0 })),
+        totalAmount,
+        registrationAmount: regFee,
+        cardCharge: Number(cardCharge) || 0,
         discount: Number(discount) || 0,
-        billAmount, 
+        billAmount,
         status: "Paid",
         remarks,
       });
