@@ -16,7 +16,14 @@ import EPrescription     from "./pages/opd/EPrescription";
 import AddDoctor         from "./pages/opd/AddDoctor";
 
 import Accounts    from "./pages/accounts/Accounts";
-import IpdList     from "./pages/ipd/IpdList";
+import IpdList          from "./pages/ipd/IpdList";
+import IpdNewPatient    from "./pages/ipd/IpdNewPatient";
+import IpdSearchPatient from "./pages/ipd/IpdSearchPatient";
+import IpdEditPatient    from "./pages/ipd/IpdEditPatient";
+import IpdInvestigation  from "./pages/ipd/IpdInvestigation";
+import IpdDischarge      from "./pages/ipd/IpdDischarge";
+import IpdBilling        from "./pages/ipd/IpdBilling";
+import IpdServices       from "./pages/ipd/IpdServices";
 import Pharmacy    from "./pages/pharmacy/Pharmacy";
 import Operations  from "./pages/operations/Operations";
 
@@ -58,6 +65,13 @@ function App() {
 
             {/* IPD */}
             <Route path="ipd" element={<RoleRoute allowed={["admin","receptionist"]}><IpdList /></RoleRoute>} />
+            <Route path="ipd/new-patient" element={<RoleRoute allowed={["admin","receptionist"]}><IpdNewPatient /></RoleRoute>} />
+            <Route path="ipd/search"      element={<RoleRoute allowed={["admin"]}><IpdSearchPatient /></RoleRoute>} />
+            <Route path="ipd/edit/:id"          element={<RoleRoute allowed={["admin"]}><IpdEditPatient /></RoleRoute>} />
+            <Route path="ipd/investigation/:id" element={<RoleRoute allowed={["admin","receptionist"]}><IpdInvestigation /></RoleRoute>} />
+            <Route path="ipd/discharge/:id"     element={<RoleRoute allowed={["admin"]}><IpdDischarge /></RoleRoute>} />
+            <Route path="ipd/services/:id"     element={<RoleRoute allowed={["admin"]}><IpdServices /></RoleRoute>} />
+            <Route path="ipd/billing/:id"      element={<RoleRoute allowed={["admin"]}><IpdBilling /></RoleRoute>} />
 
             {/* Pharmacy */}
             <Route path="pharmacy" element={<RoleRoute allowed={["admin","pharmacist","doctor","nurse"]}><Pharmacy /></RoleRoute>} />

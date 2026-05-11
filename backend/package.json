@@ -7,7 +7,11 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "start:prod": "NODE_ENV=production node dist/server.js"
+    "start:prod": "NODE_ENV=production node dist/server.js",
+    "seed:services": "tsx src/scripts/seedServiceCatalogue.ts",
+    "seed:doctors": "tsx src/scripts/seedDoctors.ts",
+    "seed:users": "tsx src/scripts/seeduser.ts",
+    "seed:vendors": "tsx src/scripts/seedVendors.ts"
   },
   "keywords": [],
   "author": "",
