@@ -7,7 +7,11 @@
       "Bash(Get-Content \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\ipd\\\\IpdBilling.tsx\")",
       "Bash(Measure-Object -Line)",
       "Bash(Select-Object -ExpandProperty Lines)",
-      "PowerShell(\\(Get-Content \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\ipd\\\\IpdBilling.tsx\"\\).Count)"
+      "PowerShell(\\(Get-Content \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\ipd\\\\IpdBilling.tsx\"\\).Count)",
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\hospital-operations-panel\\\\backend\\\\src\\\\models\" -Recurse -File)",
+      "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\\\\Doctors.tsx\" -Force)",
+      "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\" -Force)"
     ]
   }
 }

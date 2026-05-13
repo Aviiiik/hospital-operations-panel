@@ -25,9 +25,15 @@ const ALL_NAV_ITEMS: NavItem[] = [
     subItems: [
       { title: "New Patient",        path: "/opd/new-patient",   icon: UserPlus },
       { title: "Registered Patient", path: "/opd/registered",    icon: UserCheck },
-      { title: "Search Doctor",      path: "/opd/search-doctor", icon: Stethoscope },
       { title: "E-Prescription",    path: "/opd/e-prescription", icon: FileText },
-      { title: "Add Doctor",        path: "/opd/add-doctor",    icon: UserCog },
+    ],
+  },
+  {
+    title: "Doctors", icon: Stethoscope, path: "/doctors",
+    roles: ["admin", "receptionist"],
+    subItems: [
+      { title: "Search Doctor", path: "/doctors",     icon: UserCheck },
+      { title: "Add Doctor",    path: "/doctors/add", icon: UserCog },
     ],
   },
   {
@@ -35,7 +41,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     roles: ["admin", "receptionist"],
     subItems: [
       { title: "New Admission",   path: "/ipd/new-patient", icon: UserPlus,  roles: ["admin", "receptionist"] },
-      { title: "Search Patient",  path: "/ipd/search",      icon: UserCheck, roles: ["admin"] },
+      { title: "Search Patient",  path: "/ipd/search",      icon: UserCheck, roles: ["admin", "receptionist"] },
     ],
   },
   { title: "Pharmacy",  icon: Pill,         path: "/pharmacy",   roles: ["admin", "pharmacist", "doctor", "nurse"] },

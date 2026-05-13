@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle } from "lucide-react";
+import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee } from "lucide-react";
 import opdService from "@/services/opdService";
 import ipdService from "@/services/ipdService";
 
@@ -15,6 +15,7 @@ interface IpdStats {
   admittedToday:     number;
   dischargedToday:   number;
   bedsOccupied:      number;
+  revenueToday:      number;
   recentAdmissions:  RecentAdmission[];
 }
 
@@ -167,7 +168,7 @@ export default function Dashboard() {
       {/* ── IPD Stats ───────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">IPD</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
           <Card className="border-green-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Currently Admitted</CardTitle>
@@ -217,6 +218,19 @@ export default function Dashboard() {
                 {ipdLoading ? "—" : ipdStats?.bedsOccupied ?? 0}
               </div>
               <p className="text-xs text-gray-500 mt-1">Assigned beds</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-emerald-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+              <IndianRupee className="h-5 w-5 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-emerald-700">
+                {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueToday ?? 0)}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Receipts collected</p>
             </CardContent>
           </Card>
         </div>

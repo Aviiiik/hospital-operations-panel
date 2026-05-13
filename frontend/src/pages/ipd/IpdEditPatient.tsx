@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee, BedDouble, Receipt, Pill } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS, DISCHARGE_TYPES,
@@ -36,9 +36,9 @@ export default function IpdEditPatient() {
 
   const [form, setForm] = useState<any>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [doctorInput, setDoctorInput] = useState("");
-  const [doctorSuggestions, setDoctorSuggestions] = useState<string[]>([]);
-  const [allDoctors, setAllDoctors] = useState<string[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState("");
+  const [specFilter, setSpecFilter]   = useState("");
+  const [allDoctors, setAllDoctors]   = useState<{ _id: string; name: string; specialization: string; department: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
 
@@ -61,7 +61,7 @@ export default function IpdEditPatient() {
       .finally(() => setLoading(false));
 
     opdService.getDoctors().then(r => {
-      setAllDoctors((r.data.data.doctors || []).map((d: any) => d.name));
+      setAllDoctors(r.data.data.doctors || []);
     }).catch(() => {});
   }, [id]);
 
@@ -77,20 +77,14 @@ export default function IpdEditPatient() {
 
   const handleBedCategory = (cat: string) => setForm((f: any) => ({ ...f, bedCategory: cat, bedNo: "" }));
 
-  const handleDoctorInput = (val: string) => {
-    setDoctorInput(val);
-    setDoctorSuggestions(
-      val.trim().length > 0
-        ? allDoctors.filter(d => d.toLowerCase().includes(val.toLowerCase()))
-        : []
-    );
-  };
-
-  const addDoctor = (name: string) => {
-    if (!name.trim()) return;
-    setDoctors(prev => [...prev, { slNo: prev.length + 1, doctorName: name.trim() }]);
-    setDoctorInput("");
-    setDoctorSuggestions([]);
+  const addDoctor = () => {
+    if (!selectedDoc) return;
+    if (doctors.some(d => d.doctorName === selectedDoc)) {
+      toast.error("Doctor already added");
+      return;
+    }
+    setDoctors(prev => [...prev, { slNo: prev.length + 1, doctorName: selectedDoc }]);
+    setSelectedDoc("");
   };
 
   const removeDoctor = (idx: number) => {
@@ -140,13 +134,25 @@ export default function IpdEditPatient() {
             onClick={() => navigate(`/ipd/services/${id}`)}>
             <ReceiptText className="h-4 w-4" /> Services
           </Button>
+          <Button variant="outline" className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            onClick={() => navigate(`/ipd/bed-allotment/${id}`)}>
+            <BedDouble className="h-4 w-4" /> Bed Allotment
+          </Button>
           <Button variant="outline" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
             onClick={() => navigate(`/ipd/billing/${id}`)}>
             <IndianRupee className="h-4 w-4" /> Billing
           </Button>
+          <Button variant="outline" className="gap-2 border-teal-300 text-teal-700 hover:bg-teal-50"
+            onClick={() => navigate(`/ipd/receipt/${id}`)}>
+            <Receipt className="h-4 w-4" /> Receipt
+          </Button>
           <Button variant="outline" className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
             onClick={() => navigate(`/ipd/investigation/${id}`)}>
             <FlaskConical className="h-4 w-4" /> Investigation
+          </Button>
+          <Button variant="outline" className="gap-2 border-green-300 text-green-700 hover:bg-green-50"
+            onClick={() => navigate(`/ipd/pharmacy/${id}`)}>
+            <Pill className="h-4 w-4" /> Pharmacy
           </Button>
           <Button variant="outline" className="gap-2 border-orange-300 text-orange-700 hover:bg-orange-50"
             onClick={() => navigate(`/ipd/discharge/${id}`)}>
@@ -401,25 +407,33 @@ export default function IpdEditPatient() {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Under Doctor</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2 relative">
-            <Input
-              value={doctorInput}
-              onChange={e => handleDoctorInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addDoctor(doctorInput); } }}
-              placeholder="Type doctor name or search…"
-              className="h-9 text-sm flex-1"
-            />
-            <Button type="button" size="sm" className="h-9 bg-red-600 hover:bg-red-700" onClick={() => addDoctor(doctorInput)}>
+          {/* Filters row */}
+          <div className="flex gap-2 flex-wrap">
+            {/* Specialization filter */}
+            <Select value={specFilter || "all"} onValueChange={v => { setSpecFilter(v === "all" ? "" : v); setSelectedDoc(""); }}>
+              <SelectTrigger className="h-9 text-sm w-52"><SelectValue placeholder="All specializations" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All specializations</SelectItem>
+                {[...new Set(allDoctors.map(d => d.specialization).filter(Boolean))].sort().map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Doctor select — filtered by specialization */}
+            <Select value={selectedDoc || "none"} onValueChange={v => setSelectedDoc(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm flex-1 min-w-48"><SelectValue placeholder="Select doctor…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">-- Select doctor --</SelectItem>
+                {allDoctors
+                  .filter(d => !specFilter || d.specialization === specFilter)
+                  .map(d => (
+                    <SelectItem key={d._id} value={d.name}>{d.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button type="button" size="sm" className="h-9 bg-red-600 hover:bg-red-700 shrink-0" onClick={addDoctor}>
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
-            {doctorSuggestions.length > 0 && (
-              <div className="absolute top-10 left-0 right-16 bg-white border rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
-                {doctorSuggestions.map(d => (
-                  <button key={d} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onClick={() => addDoctor(d)}>{d}</button>
-                ))}
-              </div>
-            )}
           </div>
           {doctors.length > 0 && (
             <table className="w-full text-sm border-collapse">

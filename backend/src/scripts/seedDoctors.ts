@@ -6,28 +6,70 @@ import User from "../models/User.js";
 dotenv.config();
 
 const doctors = [
-  { name: "Dr. Debarchan Ghosh",        username: "debarchan.ghosh",       fees: "1000" },
-  { name: "Dr. Bhaskar Sinha",           username: "bhaskar.sinha",         fees: "500"  },
-  { name: "Dr. Piyali Chatterjee",       username: "piyali.chatterjee",     fees: "700"  },
-  { name: "Dr. Anish Hazra",             username: "anish.hazra",           fees: "500"  },
-  { name: "Dr. Nirdesh Tiwari",          username: "nirdesh.tiwari",        fees: "700"  },
-  { name: "Dr. Kaushik Konar",           username: "kaushik.konar",         fees: "500"  },
-  { name: "Dr. Avishek Jaiswal",         username: "avishek.jaiswal",       fees: "500"  },
-  { name: "Dr. Soumya Gayen",            username: "soumya.gayen",          fees: "1000" },
-  { name: "Dr. Anubhab Goswami",         username: "anubhab.goswami",       fees: "1000" },
-  { name: "Dr. Sreemanti Bag",           username: "sreemanti.bag",         fees: "500"  },
-  { name: "Dr. Rajesh Jindal",           username: "rajesh.jindal",         fees: "2500" },
-  { name: "Dr. Saikat Bhawal",           username: "saikat.bhawal",         fees: "500"  },
-  { name: "Dr. Anita Chakraborty Sarkar",username: "anita.chakraborty",     fees: "1000" },
-  { name: "Dr. Sk. M. A. Uddin",         username: "sk.ma.uddin",           fees: "600"  },
-  { name: "Dr. Siddheartha Das",         username: "siddheartha.das",       fees: "1000" },
-  { name: "Dr. Amitava Das",             username: "amitava.das",           fees: "1000" },
-  { name: "Dr. Abhijit Mondal",          username: "abhijit.mondal",        fees: "850"  },
-  { name: "Dr. Subhadip Pal",            username: "subhadip.pal",          fees: "1000" },
-  { name: "Dr. P. K. Pujari",            username: "pk.pujari",             fees: "1500" },
-  { name: "Dr. M. K. Vijay",             username: "mk.vijay",              fees: "1200" },
-  { name: "Dr. Debanik Sarkar",          username: "debanik.sarkar",        fees: "1000" },
-  { name: "Dr. D. J. Bhoumick",          username: "dj.bhoumick",           fees: "1500" },
+  { name: "DEBARCHAN GHOSH",              username: "debarchan.ghosh",            specialization: "SURGEON" },
+  { name: "A. K. KHAITAN",                username: "ak.khaitan",                 specialization: "PSYCHIATRY" },
+  { name: "ABHIJIT MONDAL",               username: "abhijit.mondal",             specialization: "" },
+  { name: "ACHYUT ROY CHOUDHURI",         username: "achyut.roy.choudhuri",       specialization: "ANESTHETIST" },
+  { name: "AMITAVA DAS (SPECIALIST)",     username: "amitava.das.specialist",     specialization: "CARDIOLOGIST" },
+  { name: "ANISH HAZRA",                  username: "anish.hazra",                specialization: "" },
+  { name: "ANUVAB GOSWAMI",               username: "anuvab.goswami",             specialization: "" },
+  { name: "ANWESHA CHAKRABORTY",          username: "anwesha.chakraborty",        specialization: "" },
+  { name: "ARCOJIT GHOSH",                username: "arcojit.ghosh",              specialization: "" },
+  { name: "ARJUN ROY",                    username: "arjun.roy",                  specialization: "NEPHROLOGIST" },
+  { name: "ARPITA SARKAR",                username: "arpita.sarkar",              specialization: "" },
+  { name: "AVISHEK JAISWAL",              username: "avishek.jaiswal",            specialization: "" },
+  { name: "BARUN PRAMANIK",               username: "barun.pramanik",             specialization: "PHYSIOTHERAPY" },
+  { name: "BHASKAR SINHA",                username: "bhaskar.sinha",              specialization: "GENERAL" },
+  { name: "CHANDRANEEL SAHA",             username: "chandraneel.saha",           specialization: "ANESTHETIST" },
+  { name: "D. J. BHAUMIK",                username: "dj.bhaumik",                 specialization: "MBBS, MS" },
+  { name: "DEBANIK SARKAR",               username: "debanik.sarkar",             specialization: "" },
+  { name: "DEBARCHAN GHOSH (SPECIALIST)", username: "debarchan.ghosh.specialist", specialization: "SURGEON" },
+  { name: "DEEP DAS (SPECIALIST)",        username: "deep.das.specialist",        specialization: "NEUROLOGIST" },
+  { name: "DR. ARDHENDU SEKHAR PANDIT",   username: "ardhendu.sekhar.pandit",     specialization: "" },
+  { name: "EMERGENCY MANAGEMENT CARE",    username: "emergency.management",       specialization: "" },
+  { name: "GOURAB BANERJEE",              username: "gourab.banerjee",            specialization: "" },
+  { name: "GOURAV BANERJEE",              username: "gourav.banerjee",            specialization: "" },
+  { name: "GOUTAM GHOSH",                 username: "goutam.ghosh",               specialization: "GENERAL" },
+  { name: "HIMADRI SEKHAR CHAKRABORTY",   username: "himadri.sekhar.chakraborty", specialization: "ANESTHETIST" },
+  { name: "INDRANEEL SAHA",               username: "indraneel.saha",             specialization: "GASTROINTESTINAL" },
+  { name: "INITIAL MANAGEMENT CHARGES",   username: "initial.management.charges", specialization: "" },
+  { name: "K. C. MALLICK",                username: "kc.mallick",                 specialization: "" },
+  { name: "LALTU CHANDA",                 username: "laltu.chanda",               specialization: "PHYSIOTHERAPY" },
+  { name: "MALOY KUMAR BERA",             username: "maloy.kumar.bera",           specialization: "" },
+  { name: "MANOJ KUMAR ADAK",             username: "manoj.kumar.adak",           specialization: "ANESTHETIST" },
+  { name: "MD. BASIR AHAMED",             username: "md.basir.ahamed",            specialization: "" },
+  { name: "MONICA SHAH",                  username: "monica.shah",                specialization: "GYNAECOLOGIST" },
+  { name: "MUKESH KUMAR VIJAY",           username: "mukesh.kumar.vijay",         specialization: "UROLOGIST & GEN. SURGEON" },
+  { name: "NILADRI SEKHAR MUKHERJEE",     username: "niladri.sekhar.mukherjee",   specialization: "ANESTHETIST" },
+  { name: "NIRDESH TIWARI",               username: "nirdesh.tiwari",             specialization: "" },
+  { name: "P.K.PUJARI",                   username: "pk.pujari",                  specialization: "" },
+  { name: "PIYALI CHATTOPADHYAY",         username: "piyali.chattopadhyay",       specialization: "GYNAECOLOGIST" },
+  { name: "PRANJAL SARKAR",               username: "pranjal.sarkar",             specialization: "" },
+  { name: "PREETI VIJAY",                 username: "preeti.vijay",               specialization: "GYNAECOLOGIST & OBSTERTRICIAN" },
+  { name: "PREETY VIJAY",                 username: "preety.vijay",               specialization: "GYNAECOLOGIST" },
+  { name: "RAJESH JINDEL",                username: "rajesh.jindel",              specialization: "ONCOLOGY" },
+  { name: "RESHMI DUTTA SARKAR",          username: "reshmi.dutta.sarkar",        specialization: "" },
+  { name: "RICK BANERJEE",                username: "rick.banerjee",              specialization: "PULMONOLOGIST" },
+  { name: "SAIKAT SARKAR",                username: "saikat.sarkar",              specialization: "" },
+  { name: "SANDIP BHATTACHRYA",           username: "sandip.bhattachrya",         specialization: "" },
+  { name: "SANJAY SEN",                   username: "sanjay.sen",                 specialization: "ORTHOPAEDIC SURGEON" },
+  { name: "SANKHADIP PRAMANIK",           username: "sankhadip.pramanik",         specialization: "" },
+  { name: "SASHI JINDEL",                 username: "sashi.jindel",               specialization: "GYNAECOLOGIST" },
+  { name: "SIDHARTH DAS",                 username: "sidharth.das",               specialization: "" },
+  { name: "SK.M. A.UDDIN",                username: "skm.auddin",                 specialization: "" },
+  { name: "SOUGATA BHATTACHARYA",         username: "sougata.bhattacharya",       specialization: "" },
+  { name: "SOUMYA DAS",                   username: "soumya.das",                 specialization: "PULMONOLOGIST" },
+  { name: "SOUMYA GAYEN",                 username: "soumya.gayen",               specialization: "" },
+  { name: "SOUMYADIP GUPTA",              username: "soumyadip.gupta",            specialization: "ANESTHETIST" },
+  { name: "SOURAV BASU",                  username: "sourav.basu",                specialization: "ANESTHETIST" },
+  { name: "SREEMANTI BAG",                username: "sreemanti.bag",              specialization: "" },
+  { name: "SUBHADIP PAL",                 username: "subhadip.pal",               specialization: "" },
+  { name: "SUBIR PAUL",                   username: "subir.paul",                 specialization: "PAEDIATRIC SURGEON" },
+  { name: "SUMIT GOSWAMI",                username: "sumit.goswami",              specialization: "ANESTHETIST" },
+  { name: "SUPARNA DAS",                  username: "suparna.das",                specialization: "SPEACH THERAPIST" },
+  { name: "TAPAS LAHA",                   username: "tapas.laha",                 specialization: "" },
+  { name: "VIDAGDHAMAY BISWAS",           username: "vidagdhamay.biswas",         specialization: "ANESTHETIST" },
+  { name: "VIPIN KATIYAR",                username: "vipin.katiyar",              specialization: "UROLOGIST & GEN. SURGEON" },
 ];
 
 const seedDoctors = async () => {
@@ -38,36 +80,45 @@ const seedDoctors = async () => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash("doctor123", salt);
 
+    // Find the highest existing mobile among Doctor users so we don't collide
+    const lastDoc = await User.findOne({ role: "Doctor" }).sort({ mobile: -1 }).lean() as any;
+    let mobileCounter = lastDoc ? (parseInt(lastDoc.mobile, 10) || 9000000000) : 9000000000;
+
     let created = 0;
     let skipped = 0;
 
-    for (let i = 0; i < doctors.length; i++) {
-      const doc = doctors[i];
-      const mobile = `90000${String(i + 1).padStart(5, "0")}`;
-
-      const existing = await User.findOne({ username: doc.username });
-      if (existing) {
-        console.log(`  Skipped (already exists): ${doc.username}`);
+    for (const doc of doctors) {
+      const existingByUsername = await User.findOne({ username: doc.username });
+      if (existingByUsername) {
+        console.log(`  Skipped (username exists): ${doc.username}`);
         skipped++;
         continue;
       }
 
+      mobileCounter++;
+      // Ensure the generated mobile isn't already taken
+      while (await User.exists({ mobile: String(mobileCounter) })) {
+        mobileCounter++;
+      }
+      const mobile = String(mobileCounter);
+
       await User.create({
-        name: doc.name,
-        username: doc.username,
-        password: hashedPassword,
+        name:            doc.name,
+        username:        doc.username,
+        password:        hashedPassword,
         mobile,
-        role: "Doctor",
-        department: "OPD",
-        consultancyFees: doc.fees,
+        role:            "Doctor",
+        department:      "OPD",
+        specialization:  doc.specialization,
+        consultancyFees: "",
       });
 
-      console.log(`  Created: ${doc.name} (fees: ${doc.fees}, mobile: ${mobile})`);
+      console.log(`  Created: ${doc.name}${doc.specialization ? ` (${doc.specialization})` : ""} — mobile: ${mobile}`);
       created++;
     }
 
     console.log(`\nDone — ${created} created, ${skipped} skipped.`);
-    console.log("Login password for all: doctor123");
+    console.log("Default login password for all: doctor123");
   } catch (error) {
     console.error("Error seeding doctors:", error);
   } finally {

@@ -74,7 +74,7 @@ router.post("/patients", requireAdminOrReceptionist, async (req, res) => {
   }
 });
 
-router.get("/patients", requireAdmin, async (req, res) => {
+router.get("/patients", requireAdminOrReceptionist, async (req, res) => {
   try {
     const patients = await ipdService.searchIpdPatients(req.query as any);
     res.json({ success: true, data: { patients } });
@@ -288,6 +288,181 @@ router.delete("/vendors/:id", requireAdmin, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
+});
+
+// ─── Bed Allotment routes ─────────────────────────────────────────────────────
+
+router.get("/bed-allotments/:patientId", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const allotments = await ipdService.getBedAllotments(req.params.patientId);
+    res.json({ success: true, data: { allotments } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/bed-allotments/:patientId/summary", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const summary = await ipdService.getBedAllotmentSummary(req.params.patientId);
+    res.json({ success: true, data: summary });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/bed-allotments/:patientId", requireAdmin, async (req, res) => {
+  try {
+    const allotment = await ipdService.createBedAllotment(req.params.patientId, req.body);
+    res.status(201).json({ success: true, data: allotment });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 500;
+    res.status(status).json({ message: err.message });
+  }
+});
+
+router.put("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
+  try {
+    const allotment = await ipdService.updateBedAllotment(req.params.id, req.body);
+    if (!allotment) return res.status(404).json({ message: "Allotment not found" });
+    res.json({ success: true, data: allotment });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
+  try {
+    const allotment = await ipdService.deleteBedAllotment(req.params.id);
+    if (!allotment) return res.status(404).json({ message: "Allotment not found" });
+    res.json({ success: true, data: allotment });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Receipt routes ───────────────────────────────────────────────────────────
+
+router.get("/receipts/:patientId", requireAdmin, async (req, res) => {
+  try {
+    const receipts = await ipdService.getReceipts(req.params.patientId);
+    res.json({ success: true, data: { receipts } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/receipts/:patientId/summary", requireAdmin, async (req, res) => {
+  try {
+    const summary = await ipdService.getReceiptSummary(req.params.patientId);
+    res.json({ success: true, data: summary });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/receipts/:patientId", requireAdmin, async (req, res) => {
+  try {
+    const receipt = await ipdService.createReceipt(req.params.patientId, req.body);
+    res.status(201).json({ success: true, data: receipt });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 500;
+    res.status(status).json({ message: err.message });
+  }
+});
+
+router.put("/receipts/entry/:id", requireAdmin, async (req, res) => {
+  try {
+    const receipt = await ipdService.updateReceipt(req.params.id, req.body);
+    if (!receipt) return res.status(404).json({ message: "Receipt not found" });
+    res.json({ success: true, data: receipt });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete("/receipts/entry/:id", requireAdmin, async (req, res) => {
+  try {
+    const receipt = await ipdService.deleteReceipt(req.params.id);
+    if (!receipt) return res.status(404).json({ message: "Receipt not found" });
+    res.json({ success: true, data: receipt });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Pharmacy Bill routes ─────────────────────────────────────────────────────
+
+router.get("/pharmacy/:patientId/total", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const data = await ipdService.getPharmacyTotal(req.params.patientId);
+    res.json({ success: true, data });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.get("/pharmacy/:patientId", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const bills = await ipdService.getPharmacyBills(req.params.patientId);
+    res.json({ success: true, data: { bills } });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.post("/pharmacy/:patientId", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const bill = await ipdService.createPharmacyBill(req.params.patientId, req.body);
+    res.status(201).json({ success: true, data: bill });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 500;
+    res.status(status).json({ message: err.message });
+  }
+});
+
+router.put("/pharmacy/bill/:id", requireAdmin, async (req, res) => {
+  try {
+    const bill = await ipdService.updatePharmacyBill(req.params.id, req.body);
+    if (!bill) return res.status(404).json({ message: "Bill not found" });
+    res.json({ success: true, data: bill });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete("/pharmacy/bill/:id", requireAdmin, async (req, res) => {
+  try {
+    const bill = await ipdService.deletePharmacyBill(req.params.id);
+    if (!bill) return res.status(404).json({ message: "Bill not found" });
+    res.json({ success: true, data: bill });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+// ─── Pharmacy Medicine Catalog routes ─────────────────────────────────────────
+
+router.get("/pharmacy-medicines", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const activeOnly = req.query.all !== "1";
+    const medicines = await ipdService.getMedicines(activeOnly);
+    res.json({ success: true, data: { medicines } });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.post("/pharmacy-medicines", requireAdmin, async (req, res) => {
+  try {
+    const med = await ipdService.createMedicine(req.body);
+    res.status(201).json({ success: true, data: med });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.put("/pharmacy-medicines/:id", requireAdmin, async (req, res) => {
+  try {
+    const med = await ipdService.updateMedicine(req.params.id, req.body);
+    if (!med) return res.status(404).json({ message: "Medicine not found" });
+    res.json({ success: true, data: med });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete("/pharmacy-medicines/:id", requireAdmin, async (req, res) => {
+  try {
+    const med = await ipdService.deleteMedicine(req.params.id);
+    if (!med) return res.status(404).json({ message: "Medicine not found" });
+    res.json({ success: true, data: med });
+  } catch (err: any) { res.status(500).json({ message: err.message }); }
 });
 
 export default router;

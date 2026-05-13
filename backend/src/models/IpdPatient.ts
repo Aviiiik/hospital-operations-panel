@@ -76,6 +76,13 @@ const ipdPatientSchema = new mongoose.Schema({
   opdPatientId:  { type: String },
   admittedBy:    { type: String },
 
+  // Saved bed charge override (manual lock-in from billing page)
+  bedChargeOverride: { type: Number, default: null },
+
+  // Manual estimate end date for open allotments (synced across all pages)
+  estimateEndDate: { type: Date, default: null },
+  estimateEndTime: { type: String, default: null },
+
   // Status & Discharge
   status:             { type: String, enum: ["Admitted", "Discharged"], default: "Admitted" },
   dischargeDate:      { type: Date },
@@ -84,6 +91,14 @@ const ipdPatientSchema = new mongoose.Schema({
   referredTo:         { type: String },
   dischargeNote:      { type: String },
   adviceOnDischarge:  { type: String },
+
+  // Structured discharge summary sections
+  dischargeDiagnosis:   { type: String },
+  chiefComplaint:       { type: String },
+  onExamination:        { type: String },
+  pastHistory:          { type: String },
+  investigationSummary: { type: String },
+  treatmentDetails:     { type: String },
 }, { timestamps: true });
 
 export default mongoose.model("IpdPatient", ipdPatientSchema);

@@ -72,26 +72,13 @@ export function buildServiceGroups(
   });
 }
 
-// ─── Billing day calculation (12 PM IST → 11:59 AM IST next day) ─────────────
+// ─── Billing day calculation (12 AM IST → 11:59 PM IST, i.e. calendar day) ───
 export function computeBillingDays(admissionDate: Date | string, currentDate = new Date()): number {
   const adm = typeof admissionDate === "string" ? new Date(admissionDate) : admissionDate;
-  const IST     = 5.5 * 3600000;
-  const admIST  = adm.getTime() + IST;
-  const nowIST  = currentDate.getTime() + IST;
-  const NOON_MS = 12 * 3600000;
-
-  const admTod = admIST % 86400000;
-  const msToFirstNoon = admTod < NOON_MS
-    ? NOON_MS - admTod
-    : 86400000 - admTod + NOON_MS;
-
-  const msSinceAdm = nowIST - admIST;
-  if (msSinceAdm <= 0) return 1;
-
-  const msSinceFirstNoon = msSinceAdm - msToFirstNoon;
-  if (msSinceFirstNoon < 0) return 1;
-
-  return 2 + Math.floor(msSinceFirstNoon / 86400000);
+  const IST    = 5.5 * 3600000;
+  const admDay = Math.floor((adm.getTime() + IST) / 86400000);
+  const nowDay = Math.floor((currentDate.getTime() + IST) / 86400000);
+  return Math.max(1, nowDay - admDay + 1);
 }
 
 // ─── Doctor list ──────────────────────────────────────────────────────────────
@@ -184,6 +171,20 @@ export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "ESI"
 export const IPD_DEPARTMENTS     = ["MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
 export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred"];
 
+export const BED_CHARGES: Record<string, number> = {
+  "ICCU":                              5000,
+  "Single Bed AC Cabin":               2700,
+  "Suite Deluxe Cabin AC":             4000,
+  "Economy General Bed (Female)":      1900,
+  "Double Bed AC Cabin":               2100,
+  "Economy General Bed (Male)":        1900,
+  "Four Bed General Bed (AC) Male":    1500,
+  "Single Bed AC Cabin Large":         3000,
+  "Four Bed General Bed (AC) Female":  1500,
+};
+
+export const RECEIPT_MODES = ["CASH", "CHEQUE", "NEFT", "UPI", "CARD", "DD"];
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 const ipdService = {
@@ -219,6 +220,33 @@ const ipdService = {
   createServiceCatalogueItem: (data: any)   => api.post("/ipd/service-catalogue", data),
   updateServiceCatalogueItem: (id: string, data: any) => api.put(`/ipd/service-catalogue/${id}`, data),
   deleteServiceCatalogueItem: (id: string)  => api.delete(`/ipd/service-catalogue/${id}`),
+
+  // Bed Allotments
+  getBedAllotments:        (patientId: string)             => api.get(`/ipd/bed-allotments/${patientId}`),
+  getBedAllotmentSummary:  (patientId: string)             => api.get(`/ipd/bed-allotments/${patientId}/summary`),
+  createBedAllotment:      (patientId: string, data: any)  => api.post(`/ipd/bed-allotments/${patientId}`, data),
+  updateBedAllotment:      (id: string, data: any)         => api.put(`/ipd/bed-allotments/entry/${id}`, data),
+  deleteBedAllotment:      (id: string)                    => api.delete(`/ipd/bed-allotments/entry/${id}`),
+
+  // Receipts
+  getReceipts:       (patientId: string)             => api.get(`/ipd/receipts/${patientId}`),
+  getReceiptSummary: (patientId: string)             => api.get(`/ipd/receipts/${patientId}/summary`),
+  createReceipt:     (patientId: string, data: any)  => api.post(`/ipd/receipts/${patientId}`, data),
+  updateReceipt:     (id: string, data: any)         => api.put(`/ipd/receipts/entry/${id}`, data),
+  deleteReceipt:     (id: string)                    => api.delete(`/ipd/receipts/entry/${id}`),
+
+  // Pharmacy Bills
+  getPharmacyBills:   (patientId: string)            => api.get(`/ipd/pharmacy/${patientId}`),
+  getPharmacyTotal:   (patientId: string)            => api.get(`/ipd/pharmacy/${patientId}/total`),
+  createPharmacyBill: (patientId: string, data: any) => api.post(`/ipd/pharmacy/${patientId}`, data),
+  updatePharmacyBill: (id: string, data: any)        => api.put(`/ipd/pharmacy/bill/${id}`, data),
+  deletePharmacyBill: (id: string)                   => api.delete(`/ipd/pharmacy/bill/${id}`),
+  // Medicine Catalog
+  getMedicines:    (all = false) => api.get("/ipd/pharmacy-medicines", { params: all ? { all: "1" } : {} }),
+  createMedicine:  (data: any)   => api.post("/ipd/pharmacy-medicines", data),
+  updateMedicine:  (id: string, data: any) => api.put(`/ipd/pharmacy-medicines/${id}`, data),
+  deleteMedicine:  (id: string)  => api.delete(`/ipd/pharmacy-medicines/${id}`),
+
 };
 
 export default ipdService;

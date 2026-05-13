@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,8 @@ interface OccupiedBed {
 
 export default function IpdSearchPatient() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role.toLowerCase() === "admin";
 
   const [search, setSearch]             = useState({ name: "", phone: "", admissionId: "" });
   const [preset, setPreset]             = useState<DatePreset | null>("today");
@@ -122,7 +125,7 @@ export default function IpdSearchPatient() {
   const handleBedClick = (cat: string, bed: string) => {
     const occ = occupiedBeds.find(b => b.bedCategory === cat && b.bedNo === bed);
     if (occ) {
-      navigate(`/ipd/edit/${occ._id}`);
+      if (isAdmin) navigate(`/ipd/edit/${occ._id}`);
       return;
     }
     // Available bed — filter search results by this bed
@@ -151,7 +154,7 @@ export default function IpdSearchPatient() {
             <CardTitle className="text-base">Bed Status</CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Occupied — click to open patient</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Occupied{isAdmin ? " — click to open patient" : ""}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-100 border border-green-300 inline-block" /> Available — click to filter</span>
               </div>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={fetchOccupiedBeds} disabled={loadingBeds}>
@@ -179,12 +182,14 @@ export default function IpdSearchPatient() {
                           onClick={() => handleBedClick(category, bed)}
                           onMouseEnter={() => occ && setHoveredBed(occ)}
                           onMouseLeave={() => setHoveredBed(null)}
-                          className={`w-12 h-9 rounded text-xs font-semibold border-2 transition-all cursor-pointer
+                          className={`w-12 h-9 rounded text-xs font-semibold border-2 transition-all
                             ${isFiltered
-                              ? "border-blue-500 ring-2 ring-blue-300 bg-blue-50 text-blue-700"
+                              ? "border-blue-500 ring-2 ring-blue-300 bg-blue-50 text-blue-700 cursor-pointer"
                               : isOccupied
-                                ? "bg-red-500 border-red-600 text-white hover:bg-red-600"
-                                : "bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                                ? isAdmin
+                                  ? "bg-red-500 border-red-600 text-white hover:bg-red-600 cursor-pointer"
+                                  : "bg-red-500 border-red-600 text-white cursor-default"
+                                : "bg-green-50 border-green-300 text-green-700 hover:bg-green-100 cursor-pointer"
                             }`}
                         >
                           {bed}
@@ -313,8 +318,8 @@ export default function IpdSearchPatient() {
                   </thead>
                   <tbody>
                     {patients.map(p => (
-                      <tr key={p._id} className="border-b hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/ipd/edit/${p._id}`)}>
+                      <tr key={p._id} className={`border-b hover:bg-gray-50 ${isAdmin ? "cursor-pointer" : ""}`}
+                        onClick={() => isAdmin && navigate(`/ipd/edit/${p._id}`)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-700">{p.admissionId}</td>
                         <td className="px-4 py-3 font-medium whitespace-nowrap">{p.title} {p.name}</td>
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{p.gender} / {p.ageYears}Y</td>
@@ -347,18 +352,22 @@ export default function IpdSearchPatient() {
                         </td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-700"
-                              onClick={() => navigate(`/ipd/edit/${p._id}`)}
-                              title="Edit">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-700"
-                              onClick={() => navigate(`/ipd/billing/${p._id}`)}
-                              title="Billing">
-                              <IndianRupee className="h-4 w-4" />
-                            </Button>
+                            {isAdmin && (
+                              <Button size="sm" variant="ghost"
+                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-700"
+                                onClick={() => navigate(`/ipd/edit/${p._id}`)}
+                                title="Edit">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {isAdmin && (
+                              <Button size="sm" variant="ghost"
+                                className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-700"
+                                onClick={() => navigate(`/ipd/billing/${p._id}`)}
+                                title="Billing">
+                                <IndianRupee className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

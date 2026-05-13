@@ -72,7 +72,7 @@ export default function AddDoctor() {
     try {
       await opdService.createDoctor(formData);
       toast.success("Doctor created successfully!");
-      navigate("/opd/search-doctor");
+      navigate("/doctors");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to create doctor");
     } finally {
@@ -84,7 +84,7 @@ export default function AddDoctor() {
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="outline" asChild>
-          <Link to="/opd/search-doctor">
+          <Link to="/doctors">
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to Search Doctor
           </Link>
         </Button>
@@ -226,7 +226,7 @@ export default function AddDoctor() {
             </div>
 
             <div className="flex justify-end gap-4 pt-6 border-t">
-              <Button variant="outline" type="button" onClick={() => navigate("/opd/search-doctor")}>
+              <Button variant="outline" type="button" onClick={() => navigate("/doctors")}>
                 Cancel
               </Button>
               <Button type="submit" className="bg-red-600 hover:bg-red-700 px-8" disabled={loading}>

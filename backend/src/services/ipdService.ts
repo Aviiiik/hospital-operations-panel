@@ -1,35 +1,23 @@
 import IpdPatient from "../models/IpdPatient.js";
 import IpdInvestigation from "../models/IpdInvestigation.js";
 import IpdBillingEntry from "../models/IpdBillingEntry.js";
+import IpdBedAllotment from "../models/IpdBedAllotment.js";
+import IpdReceipt from "../models/IpdReceipt.js";
 import ServiceCatalogue from "../models/ServiceCatalogue.js";
 import InvestigationVendor from "../models/InvestigationVendor.js";
+import IpdPharmacyBill from "../models/IpdPharmacyBill.js";
+import PharmacyMedicine from "../models/PharmacyMedicine.js";
 
 function istNow(): Date {
   return new Date(Date.now() + 5.5 * 60 * 60 * 1000);
 }
 
-// ─── Billing day calculation (12 PM IST → 11:59 AM IST next day) ─────────────
-// Day 1 = admission to next 12 PM IST, every subsequent 24-hour noon-to-noon = 1 more day
+// ─── Billing day calculation (12 AM IST → 11:59 PM IST, i.e. calendar day) ───
 export function computeBillingDays(admissionDate: Date, currentDate = new Date()): number {
-  const IST = 5.5 * 3600000;
-  const admIST   = admissionDate.getTime() + IST;
-  const nowIST   = currentDate.getTime() + IST;
-  const NOON_MS  = 12 * 3600000;
-
-  // Time-of-day in IST for admission
-  const admTod = admIST % 86400000;
-  // ms from admission until first 12 PM IST mark
-  const msToFirstNoon = admTod < NOON_MS
-    ? NOON_MS - admTod
-    : 86400000 - admTod + NOON_MS;
-
-  const msSinceAdm       = nowIST - admIST;
-  if (msSinceAdm <= 0) return 1;
-
-  const msSinceFirstNoon = msSinceAdm - msToFirstNoon;
-  if (msSinceFirstNoon < 0) return 1;
-
-  return 2 + Math.floor(msSinceFirstNoon / 86400000);
+  const IST    = 5.5 * 3600000;
+  const admDay = Math.floor((admissionDate.getTime() + IST) / 86400000);
+  const nowDay = Math.floor((currentDate.getTime() + IST) / 86400000);
+  return Math.max(1, nowDay - admDay + 1);
 }
 
 // ─── ID Generation ────────────────────────────────────────────────────────────
@@ -69,7 +57,6 @@ export async function createIpdPatient(data: any) {
     admissionTime: timeStr,
   });
   await patient.save();
-  await createDefaultBillingEntries(String(patient._id), istNow());
   return patient;
 }
 
@@ -328,7 +315,7 @@ export async function getIpdDashboardStats() {
   todayIST.setHours(0, 0, 0, 0);
   const todayStartUTC = new Date(todayIST.getTime() - IST);
 
-  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw] =
+  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, revenueAgg] =
     await Promise.all([
       IpdPatient.countDocuments({ status: "Admitted" }),
       IpdPatient.countDocuments({ admissionDate: { $gte: todayStartUTC } }),
@@ -339,7 +326,13 @@ export async function getIpdDashboardStats() {
         .limit(8)
         .select("admissionId name title bedNo bedCategory department admissionDate status")
         .lean(),
+      IpdReceipt.aggregate([
+        { $match: { receiptDate: { $gte: todayStartUTC } } },
+        { $group: { _id: null, total: { $sum: { $subtract: ["$receiptAmount", { $ifNull: ["$refund", 0] }] } } } },
+      ]),
     ]);
+
+  const revenueToday = (revenueAgg[0]?.total as number) ?? 0;
 
   const recentAdmissions = (recentRaw as any[]).map(p => ({
     _id:           String(p._id),
@@ -352,7 +345,7 @@ export async function getIpdDashboardStats() {
     status:        p.status,
   }));
 
-  return { currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentAdmissions };
+  return { currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentAdmissions, revenueToday };
 }
 
 // ─── Investigation Vendors ────────────────────────────────────────────────────
@@ -382,3 +375,266 @@ export async function updateVendor(id: string, data: any) {
 export async function deleteVendor(id: string) {
   return InvestigationVendor.findByIdAndDelete(id).lean();
 }
+
+// ─── Bed Allotment ────────────────────────────────────────────────────────────
+
+export async function getBedAllotments(patientId: string) {
+  return IpdBedAllotment.find({ patientId }).sort({ allotmentDate: 1, createdAt: 1 }).lean();
+}
+
+export async function createBedAllotment(patientId: string, data: any) {
+  const patient = await IpdPatient.findById(patientId).lean() as any;
+  if (!patient) throw new Error("Patient not found");
+
+  const now = istNow();
+  const allotmentDate = data.allotmentDate ? new Date(data.allotmentDate) : now;
+  const allotmentTime = data.allotmentTime ||
+    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+  // Close off the currently active allotment
+  await IpdBedAllotment.updateMany(
+    { patientId, isCurrent: true },
+    { $set: { isCurrent: false, endDate: allotmentDate, endTime: allotmentTime } }
+  );
+
+  const allotment = new IpdBedAllotment({
+    patientId,
+    admissionId:      patient.admissionId,
+    bedCategory:      data.bedCategory,
+    bedNo:            data.bedNo,
+    charge:           Number(data.charge) || 0,
+    allotmentDate,
+    allotmentTime,
+    effectiveTime:    data.effectiveTime || allotmentTime,
+    packageDays:      Number(data.packageDays) || 0,
+    includeInPackage: Boolean(data.includeInPackage),
+    cashService:      Boolean(data.cashService),
+    isCurrent:        true,
+    createdBy:        data.createdBy,
+  });
+  await allotment.save();
+
+  // Update the patient's current bed
+  await IpdPatient.findByIdAndUpdate(patientId, {
+    $set: { bedCategory: data.bedCategory, bedNo: data.bedNo },
+  });
+
+  return allotment;
+}
+
+export async function updateBedAllotment(id: string, data: any) {
+  const allowed = ["bedCategory", "bedNo", "charge", "allotmentDate", "allotmentTime",
+    "endDate", "endTime", "effectiveTime", "effectiveEndTime",
+    "packageDays", "includeInPackage", "cashService", "isCurrent"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (update.allotmentDate) update.allotmentDate = new Date(update.allotmentDate);
+  if (update.endDate)       update.endDate       = new Date(update.endDate);
+  return IpdBedAllotment.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteBedAllotment(id: string) {
+  return IpdBedAllotment.findByIdAndDelete(id).lean();
+}
+
+export async function getBedAllotmentSummary(patientId: string) {
+  const allotments = await IpdBedAllotment.find({ patientId }).sort({ allotmentDate: 1 }).lean() as any[];
+  const now = new Date();
+  let totalBedCharge = 0;
+  const details = allotments.map((a: any) => {
+    const days = a.endDate
+      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
+      : 1;
+    const charge = days * (a.charge || 0);
+    totalBedCharge += charge;
+    return { ...a, billingDays: days, totalCharge: charge };
+  });
+  return { allotments: details, totalBedCharge };
+}
+
+// ─── Receipt ──────────────────────────────────────────────────────────────────
+
+async function generateReceiptNo(): Promise<string> {
+  const now = istNow();
+  const year = now.getFullYear();
+  const prefix = `RCP${year}`;
+  const last = await IpdReceipt.findOne({ receiptNo: { $regex: `^${prefix}` } })
+    .sort({ receiptNo: -1 }).lean();
+  let serial = 1;
+  if (last) {
+    const n = parseInt((last as any).receiptNo.slice(prefix.length), 10);
+    if (!isNaN(n)) serial = n + 1;
+  }
+  return `${prefix}${String(serial).padStart(5, "0")}`;
+}
+
+export async function getReceipts(patientId: string) {
+  return IpdReceipt.find({ patientId }).sort({ receiptDate: 1, createdAt: 1 }).lean();
+}
+
+export async function createReceipt(patientId: string, data: any) {
+  const patient = await IpdPatient.findById(patientId).lean() as any;
+  if (!patient) throw new Error("Patient not found");
+
+  const receiptNo   = await generateReceiptNo();
+  const now         = istNow();
+  const receiptDate = data.receiptDate ? new Date(data.receiptDate) : now;
+
+  const receipt = new IpdReceipt({
+    patientId,
+    admissionId:   patient.admissionId,
+    receiptNo,
+    receiptDate,
+    receiptAmount: Number(data.receiptAmount) || 0,
+    receiptMode:   data.receiptMode || "CASH",
+    remarks:       data.remarks || "",
+    tds:           Number(data.tds)        || 0,
+    disallowed:    Number(data.disallowed) || 0,
+    refund:        Number(data.refund)     || 0,
+    chequeNo:      data.chequeNo      || "",
+    chequeRefNo:   data.chequeRefNo   || "",
+    transactionId: data.transactionId || "",
+    createdBy:     data.createdBy     || "",
+  });
+  await receipt.save();
+  return receipt;
+}
+
+export async function updateReceipt(id: string, data: any) {
+  const allowed = ["receiptDate", "receiptAmount", "receiptMode", "remarks",
+    "tds", "disallowed", "refund", "chequeNo", "chequeRefNo", "transactionId"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (update.receiptDate) update.receiptDate = new Date(update.receiptDate);
+  if (update.receiptAmount !== undefined) update.receiptAmount = Number(update.receiptAmount) || 0;
+  return IpdReceipt.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteReceipt(id: string) {
+  return IpdReceipt.findByIdAndDelete(id).lean();
+}
+
+export async function getReceiptSummary(patientId: string) {
+  const receipts = await IpdReceipt.find({ patientId }).lean() as any[];
+  const totalReceived  = receipts.reduce((s, r) => s + (r.receiptAmount || 0), 0);
+  const totalTds       = receipts.reduce((s, r) => s + (r.tds        || 0), 0);
+  const totalDisallowed= receipts.reduce((s, r) => s + (r.disallowed || 0), 0);
+  const totalRefund    = receipts.reduce((s, r) => s + (r.refund     || 0), 0);
+  return { totalReceived, totalTds, totalDisallowed, totalRefund, count: receipts.length };
+}
+
+// ─── Pharmacy Bills ───────────────────────────────────────────────────────────
+
+async function generatePharmacyBillNo(): Promise<string> {
+  const now = istNow();
+  const year = now.getFullYear();
+  const prefix = `PHR${year}`;
+  const last = await IpdPharmacyBill.findOne({ billNo: { $regex: `^${prefix}` } })
+    .sort({ billNo: -1 }).lean();
+  let serial = 1;
+  if (last) {
+    const n = parseInt((last as any).billNo.slice(prefix.length), 10);
+    if (!isNaN(n)) serial = n + 1;
+  }
+  return `${prefix}${String(serial).padStart(5, "0")}`;
+}
+
+export async function getPharmacyBills(patientId: string) {
+  return IpdPharmacyBill.find({ patientId }).sort({ billDate: -1, createdAt: -1 }).lean();
+}
+
+export async function createPharmacyBill(patientId: string, data: any) {
+  const patient = await IpdPatient.findById(patientId).lean() as any;
+  if (!patient) throw new Error("Patient not found");
+  const billNo = await generatePharmacyBillNo();
+  const items = (data.items || []).map((it: any) => {
+    const qty   = Number(it.qty)   || 0;
+    const mrp   = Number(it.mrp)   || 0;
+    const disc  = Number(it.discount) || 0;
+    const total = qty * mrp;
+    const net   = total - (total * disc / 100);
+    return { ...it, qty, mrp, discount: disc, totalAmount: total, netAmount: net };
+  });
+  const totalAmount = items.reduce((s: number, i: any) => s + i.totalAmount, 0);
+  const netAmount   = items.reduce((s: number, i: any) => s + i.netAmount,   0);
+  const bill = new IpdPharmacyBill({
+    patientId,
+    admissionId: patient.admissionId,
+    billNo,
+    billDate:     data.billDate     ? new Date(data.billDate) : istNow(),
+    referredBy:   data.referredBy   || "",
+    vendor:       data.vendor       || "",
+    vendorBillNo: data.vendorBillNo || "",
+    items,
+    totalAmount,
+    netAmount,
+  });
+  await bill.save();
+  return bill;
+}
+
+export async function updatePharmacyBill(id: string, data: any) {
+  const allowed = ["billDate", "referredBy", "vendor", "vendorBillNo", "items"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (update.billDate) update.billDate = new Date(update.billDate);
+  if (update.items) {
+    update.items = update.items.map((it: any) => {
+      const qty   = Number(it.qty)   || 0;
+      const mrp   = Number(it.mrp)   || 0;
+      const disc  = Number(it.discount) || 0;
+      const total = qty * mrp;
+      const net   = total - (total * disc / 100);
+      return { ...it, qty, mrp, discount: disc, totalAmount: total, netAmount: net };
+    });
+    update.totalAmount = update.items.reduce((s: number, i: any) => s + i.totalAmount, 0);
+    update.netAmount   = update.items.reduce((s: number, i: any) => s + i.netAmount,   0);
+  }
+  return IpdPharmacyBill.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deletePharmacyBill(id: string) {
+  return IpdPharmacyBill.findByIdAndDelete(id).lean();
+}
+
+export async function getPharmacyTotal(patientId: string) {
+  const bills = await IpdPharmacyBill.find({ patientId }).lean() as any[];
+  const total = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  return { total, count: bills.length };
+}
+
+// ─── Pharmacy Medicine Catalog ────────────────────────────────────────────────
+
+export async function getMedicines(activeOnly = true) {
+  const filter: any = activeOnly ? { isActive: true } : {};
+  return PharmacyMedicine.find(filter).sort({ termName: 1 }).lean();
+}
+
+export async function createMedicine(data: any) {
+  const count = await PharmacyMedicine.countDocuments();
+  const itemCode = data.itemCode || String(5000000 + count + 1);
+  const med = new PharmacyMedicine({
+    itemCode,
+    termName:     data.termName     || "",
+    unitName:     data.unitName     || "",
+    packingPower: data.packingPower || "",
+    boxNo:        data.boxNo        || "",
+    mrp:          Number(data.mrp)  || 0,
+    isActive:     data.isActive !== false,
+  });
+  await med.save();
+  return med;
+}
+
+export async function updateMedicine(id: string, data: any) {
+  const allowed = ["termName", "unitName", "packingPower", "boxNo", "mrp", "isActive"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (update.mrp !== undefined) update.mrp = Number(update.mrp) || 0;
+  return PharmacyMedicine.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteMedicine(id: string) {
+  return PharmacyMedicine.findByIdAndDelete(id).lean();
+}
+

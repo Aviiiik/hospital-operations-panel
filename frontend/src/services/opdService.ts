@@ -103,7 +103,9 @@ export const MEDICINES = [
 
 const opdService = {
   getDoctors:         ()          => api.get("/opd/doctors"),
+  getAllDoctors:      ()          => api.get("/opd/doctors/all"),
   createDoctor:       (data: any) => api.post("/opd/doctors", data),
+  updateDoctor:       (id: string, data: any) => api.put(`/opd/doctors/${id}`, data),
   getDashboardStats:  ()          => api.get("/opd/stats/dashboard"),
   getTodayActivity:   ()          => api.get("/opd/stats/today-activity"),
   getNextId:          ()          => api.get("/opd/patients/next-id"),
