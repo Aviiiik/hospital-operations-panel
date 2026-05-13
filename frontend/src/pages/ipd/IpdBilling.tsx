@@ -558,7 +558,7 @@ export default function IpdBilling() {
       `${billLabel} — ${patient.admissionId}`,
       buildDetailedBillHtml(
         billLabel, patient, entries, investigations, bedAllotments, fallbackBed, fallbackEndDate,
-        effectiveBedTotal, servicesGross, servicesDiscount, servicesNet,
+        effectiveBedTotal, servicesDiscount, servicesNet,
         invTotal, grandTotal, receiptSummary, logoUrl,
       ),
     );
