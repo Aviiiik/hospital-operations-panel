@@ -165,7 +165,6 @@ function buildDetailedBillHtml(
   fallbackBed: { rate: number; days: number; charge: number } | null,
   estEndDate: Date | null,
   totalBedCharge: number,
-  servicesGross: number,
   servicesDiscount: number,
   servicesNet: number,
   invTotal: number,
