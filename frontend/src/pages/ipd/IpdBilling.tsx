@@ -464,7 +464,6 @@ export default function IpdBilling() {
     return acc;
   }, {});
 
-  const servicesGross    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
   const servicesDiscount = entries.reduce((s, e) => s + (e.discount || 0), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
   const invTotal         = investigations.reduce((s, i) => s + (i.totalAmount || 0), 0);
