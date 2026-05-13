@@ -51,6 +51,22 @@ export async function getDoctors() {
     .sort({ name: 1 });
 }
 
+export async function getAllDoctors() {
+  return User.find({ role: "Doctor" })
+    .select("name username mobile department specialization shift licenseNumber consultancyFees isActive")
+    .sort({ name: 1 });
+}
+
+export async function updateDoctor(id: string, data: any) {
+  const allowed = ["name", "department", "specialization", "shift", "licenseNumber", "consultancyFees", "isActive"];
+  const update: any = {};
+  for (const key of allowed) {
+    if (data[key] !== undefined) update[key] = data[key];
+  }
+  return User.findByIdAndUpdate(id, { $set: update }, { new: true })
+    .select("name username mobile department specialization shift licenseNumber consultancyFees isActive");
+}
+
 export async function getNextPatientId() {
   const { year, month, serial } = await getNextMonthlySerial();
   const patientId = `OPD${year}${month}${serial}`;

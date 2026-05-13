@@ -8,17 +8,27 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import UsersList from "./pages/users/Users";
 import AddUser from "./pages/users/AddUser";
 
-import NewPatient       from "./pages/opd/NewPatient";
+import NewPatient        from "./pages/opd/NewPatient";
 import RegisteredPatient from "./pages/opd/RegisteredPatient";
 import BookingPage       from "./pages/opd/BookingPage";
 import SearchDoctor      from "./pages/opd/SearchDoctor";
 import EPrescription     from "./pages/opd/EPrescription";
 import AddDoctor         from "./pages/opd/AddDoctor";
 
-import Accounts    from "./pages/accounts/Accounts";
-import IpdList     from "./pages/ipd/IpdList";
-import Pharmacy    from "./pages/pharmacy/Pharmacy";
-import Operations  from "./pages/operations/Operations";
+import Accounts         from "./pages/accounts/Accounts";
+import IpdList          from "./pages/ipd/IpdList";
+import IpdNewPatient    from "./pages/ipd/IpdNewPatient";
+import IpdSearchPatient from "./pages/ipd/IpdSearchPatient";
+import IpdEditPatient   from "./pages/ipd/IpdEditPatient";
+import IpdInvestigation from "./pages/ipd/IpdInvestigation";
+import IpdDischarge     from "./pages/ipd/IpdDischarge";
+import IpdBilling       from "./pages/ipd/IpdBilling";
+import IpdServices      from "./pages/ipd/IpdServices";
+import IpdBedAllotment  from "./pages/ipd/IpdBedAllotment";
+import IpdReceipt       from "./pages/ipd/IpdReceipt";
+import IpdPharmacy      from "./pages/ipd/IpdPharmacy";
+import Pharmacy         from "./pages/pharmacy/Pharmacy";
+import Operations       from "./pages/operations/Operations";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -36,6 +46,10 @@ const OpdGuard = ({ children }: { children: React.ReactNode }) => (
   <RoleRoute allowed={["admin", "receptionist"]}>{children}</RoleRoute>
 );
 
+const DoctorGuard = ({ children }: { children: React.ReactNode }) => (
+  <RoleRoute allowed={["admin", "receptionist"]}>{children}</RoleRoute>
+);
+
 function App() {
   return (
     <AuthProvider>
@@ -49,15 +63,30 @@ function App() {
 
             {/* OPD */}
             <Route path="opd" element={<Navigate to="/opd/new-patient" replace />} />
-            <Route path="opd/new-patient"  element={<OpdGuard><NewPatient /></OpdGuard>} />
-            <Route path="opd/registered"   element={<OpdGuard><RegisteredPatient /></OpdGuard>} />
+            <Route path="opd/new-patient"     element={<OpdGuard><NewPatient /></OpdGuard>} />
+            <Route path="opd/registered"      element={<OpdGuard><RegisteredPatient /></OpdGuard>} />
             <Route path="opd/book/:patientId" element={<OpdGuard><BookingPage /></OpdGuard>} />
-            <Route path="opd/search-doctor"   element={<OpdGuard><SearchDoctor /></OpdGuard>} />
-            <Route path="opd/e-prescription" element={<OpdGuard><EPrescription /></OpdGuard>} />
-            <Route path="opd/add-doctor"     element={<OpdGuard><AddDoctor /></OpdGuard>} />
+            <Route path="opd/e-prescription"  element={<OpdGuard><EPrescription /></OpdGuard>} />
+
+            {/* Doctors — shared between OPD and IPD */}
+            <Route path="doctors"     element={<DoctorGuard><SearchDoctor /></DoctorGuard>} />
+            <Route path="doctors/add" element={<DoctorGuard><AddDoctor /></DoctorGuard>} />
+            {/* Legacy OPD doctor paths — redirect to canonical */}
+            <Route path="opd/search-doctor" element={<Navigate to="/doctors" replace />} />
+            <Route path="opd/add-doctor"    element={<Navigate to="/doctors/add" replace />} />
 
             {/* IPD */}
             <Route path="ipd" element={<RoleRoute allowed={["admin","receptionist"]}><IpdList /></RoleRoute>} />
+            <Route path="ipd/new-patient"       element={<RoleRoute allowed={["admin","receptionist"]}><IpdNewPatient /></RoleRoute>} />
+            <Route path="ipd/search"            element={<RoleRoute allowed={["admin","receptionist"]}><IpdSearchPatient /></RoleRoute>} />
+            <Route path="ipd/edit/:id"          element={<RoleRoute allowed={["admin"]}><IpdEditPatient /></RoleRoute>} />
+            <Route path="ipd/investigation/:id" element={<RoleRoute allowed={["admin","receptionist"]}><IpdInvestigation /></RoleRoute>} />
+            <Route path="ipd/discharge/:id"     element={<RoleRoute allowed={["admin"]}><IpdDischarge /></RoleRoute>} />
+            <Route path="ipd/services/:id"      element={<RoleRoute allowed={["admin"]}><IpdServices /></RoleRoute>} />
+            <Route path="ipd/billing/:id"       element={<RoleRoute allowed={["admin"]}><IpdBilling /></RoleRoute>} />
+            <Route path="ipd/bed-allotment/:id" element={<RoleRoute allowed={["admin"]}><IpdBedAllotment /></RoleRoute>} />
+            <Route path="ipd/receipt/:id"       element={<RoleRoute allowed={["admin"]}><IpdReceipt /></RoleRoute>} />
+            <Route path="ipd/pharmacy/:id"      element={<RoleRoute allowed={["admin"]}><IpdPharmacy /></RoleRoute>} />
 
             {/* Pharmacy */}
             <Route path="pharmacy" element={<RoleRoute allowed={["admin","pharmacist","doctor","nurse"]}><Pharmacy /></RoleRoute>} />

@@ -7,6 +7,7 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import opdRoutes from "./routes/opdRoutes.js";
+import ipdRoutes from "./routes/ipdRoutes.js";
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use(express.urlencoded({ extended: false, limit: "10kb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/opd", opdRoutes);
+app.use("/api/ipd", ipdRoutes);
 
 app.get("/", (_req, res) => {
   res.json({ status: "ok", message: "Hospital Backend is running" });

@@ -70,6 +70,27 @@ router.get("/doctors", async (req, res) => {
   }
 });
 
+// GET all doctors including inactive — admin or receptionist only
+router.get("/doctors/all", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const doctors = await opdService.getAllDoctors();
+    res.json({ success: true, data: { doctors } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT update doctor — admin or receptionist only
+router.put("/doctors/:id", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const doctor = await opdService.updateDoctor(req.params.id, req.body);
+    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
+    res.json({ success: true, data: doctor });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET next registration preview
 router.get("/patients/next-id", async (req, res) => {
   try {

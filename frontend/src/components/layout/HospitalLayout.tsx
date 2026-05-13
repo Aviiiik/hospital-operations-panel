@@ -25,12 +25,25 @@ const ALL_NAV_ITEMS: NavItem[] = [
     subItems: [
       { title: "New Patient",        path: "/opd/new-patient",   icon: UserPlus },
       { title: "Registered Patient", path: "/opd/registered",    icon: UserCheck },
-      { title: "Search Doctor",      path: "/opd/search-doctor", icon: Stethoscope },
       { title: "E-Prescription",    path: "/opd/e-prescription", icon: FileText },
-      { title: "Add Doctor",        path: "/opd/add-doctor",    icon: UserCog },
     ],
   },
-  { title: "IPD",       icon: Bed,          path: "/ipd",        roles: ["admin", "receptionist"] },
+  {
+    title: "Doctors", icon: Stethoscope, path: "/doctors",
+    roles: ["admin", "receptionist"],
+    subItems: [
+      { title: "Search Doctor", path: "/doctors",     icon: UserCheck },
+      { title: "Add Doctor",    path: "/doctors/add", icon: UserCog },
+    ],
+  },
+  {
+    title: "IPD", icon: Bed, path: "/ipd",
+    roles: ["admin", "receptionist"],
+    subItems: [
+      { title: "New Admission",   path: "/ipd/new-patient", icon: UserPlus,  roles: ["admin", "receptionist"] },
+      { title: "Search Patient",  path: "/ipd/search",      icon: UserCheck, roles: ["admin", "receptionist"] },
+    ],
+  },
   { title: "Pharmacy",  icon: Pill,         path: "/pharmacy",   roles: ["admin", "pharmacist", "doctor", "nurse"] },
   { title: "Accounts",  icon: DollarSign,   path: "/accounts",   roles: ["admin", "accountant", "labtech"] },
   { title: "Operations",icon: Settings,     path: "/operations", roles: ["admin", "labtech"] },
@@ -53,7 +66,6 @@ export default function HospitalLayout() {
       subItems: item.subItems?.filter(sub => !sub.roles || sub.roles.includes(role)),
     }));
 
-  const isOpdActive = location.pathname.startsWith("/opd");
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -97,7 +109,7 @@ export default function HospitalLayout() {
                     {sidebarOpen && (
                       <>
                         <span className="flex-1">{item.title}</span>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${isOpdActive ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isActive ? "rotate-180" : ""}`} />
                       </>
                     )}
                   </Link>
