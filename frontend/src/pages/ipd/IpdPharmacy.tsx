@@ -561,7 +561,7 @@ export default function IpdPharmacy() {
                             <td className="px-4 py-1.5 text-gray-500">{it.package || "—"}</td>
                             <td className="px-4 py-1.5 text-gray-500">{it.batchNo || "—"}</td>
                             <td className="px-4 py-1.5 text-gray-500">{it.expiryDate || "—"}</td>
-                            <td className="px-4 py-1.5 text-right">{fmt(it.mrp)}</td>
+                            <td className="px-4 py-1.5 text-right">{fmt(parseFloat(it.mrp))}</td>
                             <td className="px-4 py-1.5 text-center">{it.qty}</td>
                             <td className="px-4 py-1.5 text-center">{it.discount || 0}%</td>
                             <td className="px-4 py-1.5 text-right font-semibold text-green-700">{fmt(it.netAmount)}</td>
