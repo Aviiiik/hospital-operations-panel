@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import ipdService, {
-  BED_CATEGORIES, BLOOD_GROUPS, DIET_TYPES,
+  BED_CATEGORIES, BED_CHARGES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
@@ -119,7 +119,23 @@ export default function IpdNewPatient() {
         packageCharge: Number(form.packageCharge) || 0,
         doctors,
       };
-      await ipdService.createPatient(payload);
+      const res = await ipdService.createPatient(payload);
+      const newPatientId = res.data?.data?._id;
+
+      // Auto-create bed allotment if bed was assigned at admission
+      if (newPatientId && form.bedCategory && form.bedNo) {
+        try {
+          await ipdService.createBedAllotment(newPatientId, {
+            bedCategory:   form.bedCategory,
+            bedNo:         form.bedNo,
+            charge:        BED_CHARGES[form.bedCategory] ?? 0,
+            allotmentDate: form.admissionDate,
+            allotmentTime: form.admissionTime,
+            effectiveTime: form.admissionTime,
+          });
+        } catch { /* silent — bed allotment can be added manually if needed */ }
+      }
+
       toast.success("IPD patient admitted successfully!");
       setForm({ ...EMPTY, admissionDate: todayStr(), admissionTime: nowTimeStr() });
       setDoctors([]);

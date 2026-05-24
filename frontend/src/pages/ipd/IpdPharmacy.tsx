@@ -356,6 +356,10 @@ export default function IpdPharmacy() {
               <span>{fmtDate(patient.admissionDate)}</span>
             </div>
             <div>
+              <span className="text-xs text-gray-500 block">Attending Doctor(s)</span>
+              <span>{patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</span>
+            </div>
+            <div>
               <span className="text-xs text-gray-500 block">Total Pharmacy Charge</span>
               <span className="font-bold text-green-700">{fmt(totalPharmCharge)}</span>
             </div>

@@ -11,7 +11,8 @@
     "seed:services": "tsx src/scripts/seedServiceCatalogue.ts",
     "seed:doctors": "tsx src/scripts/seedDoctors.ts",
     "seed:users": "tsx src/scripts/seeduser.ts",
-    "seed:vendors": "tsx src/scripts/seedVendors.ts"
+    "seed:vendors": "tsx src/scripts/seedVendors.ts",
+    "seed:medicines": "tsx src/scripts/seedPharmacyMedicines.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +27,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.3.3",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -35,6 +37,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^25.5.0",
+    "@types/pdf-parse": "^1.1.5",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"

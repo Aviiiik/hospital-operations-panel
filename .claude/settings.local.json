@@ -11,7 +11,10 @@
       "Bash(npx tsc *)",
       "Bash(Get-ChildItem -Path \"d:\\\\hospital-operations-panel\\\\backend\\\\src\\\\models\" -Recurse -File)",
       "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\\\\Doctors.tsx\" -Force)",
-      "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\" -Force)"
+      "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\" -Force)",
+      "Bash(Get-ChildItem -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\" -Recurse -Filter \"*.tsx\" -o File)",
+      "Bash(Select-Object FullName)",
+      "Bash(node -e \"const r = require\\('pdf-parse'\\); console.log\\(typeof r\\); console.log\\(Object.keys\\(r\\)\\);\")"
     ]
   }
 }
