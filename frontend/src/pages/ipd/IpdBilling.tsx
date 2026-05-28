@@ -514,18 +514,21 @@ export default function IpdBilling() {
           setOverrideSaved(p.bedChargeOverride);
           setOverrideInput(String(p.bedChargeOverride));
         } else {
+          const openEnd: Date = p.dischargeDate
+            ? new Date(p.dischargeDate)
+            : (p.estimateEndDate ? new Date(p.estimateEndDate) : new Date());
           const computed = allotments.length > 0
             ? allotments.reduce((s, a) => {
-                const days = a.endDate && a.allotmentDate
+                if (!a.allotmentDate) return s;
+                const days = a.endDate
                   ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-                  : 1;
+                  : computeBillingDays(new Date(a.allotmentDate), openEnd);
                 return s + days * (a.charge || 0);
               }, 0)
             : (() => {
                 const rate = p.bedCategory ? (BED_CHARGES[p.bedCategory] ?? 0) : 0;
-                const end  = p.dischargeDate ? new Date(p.dischargeDate) : null;
-                const days = p.admissionDate && end
-                  ? computeBillingDays(new Date(p.admissionDate), end)
+                const days = p.admissionDate
+                  ? computeBillingDays(new Date(p.admissionDate), openEnd)
                   : 1;
                 return rate * days;
               })();
@@ -596,11 +599,13 @@ export default function IpdBilling() {
     ? { rate: fallbackRate, days: fallbackDays, charge: fallbackRate * fallbackDays }
     : null;
 
+  const openEndDate: Date = fallbackEndDate ?? new Date();
   const totalBedCharge = bedAllotments.length > 0
     ? bedAllotments.reduce((s, a) => {
-        const days = a.endDate && a.allotmentDate
+        if (!a.allotmentDate) return s;
+        const days = a.endDate
           ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : (a.allotmentDate && fallbackEndDate ? computeBillingDays(new Date(a.allotmentDate), fallbackEndDate) : 1);
+          : computeBillingDays(new Date(a.allotmentDate), openEndDate);
         return s + days * (a.charge || 0);
       }, 0)
     : (fallbackBed?.charge ?? 0);
@@ -903,9 +908,10 @@ export default function IpdBilling() {
                   </thead>
                   <tbody>
                     {bedAllotments.map(a => {
-                      const days = a.endDate && a.allotmentDate
-                        ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-                        : (a.allotmentDate && fallbackEndDate ? computeBillingDays(new Date(a.allotmentDate), fallbackEndDate) : 1);
+                      const days = !a.allotmentDate ? 1
+                        : a.endDate
+                          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
+                          : computeBillingDays(new Date(a.allotmentDate), openEndDate);
                       return (
                         <tr key={a._id} className="border-t">
                           <td className="px-4 py-2">
@@ -917,9 +923,7 @@ export default function IpdBilling() {
                           <td className="px-4 py-2 text-gray-500">
                             {a.endDate
                               ? <>{fmtDate(a.endDate)}{a.endTime ? <span className="text-xs ml-1">{a.endTime}</span> : ""}</>
-                              : fallbackEndDate
-                                ? <span className="text-xs text-orange-500">{fmtDate(fallbackEndDate.toISOString())} {estTime} <span className="text-gray-400">(est)</span></span>
-                                : "—"}
+                              : <span className="text-xs text-orange-500">{fmtDate(openEndDate.toISOString())} {estTime} <span className="text-gray-400">{estManual ? "(est)" : "(live)"}</span></span>}
                           </td>
                           <td className="px-4 py-2 text-right text-gray-600">{fmt(a.charge)}</td>
                           <td className="px-4 py-2 text-center font-semibold">{days}</td>
