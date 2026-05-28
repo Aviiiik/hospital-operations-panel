@@ -70,8 +70,6 @@ export default function IpdEditPatient() {
       .filter(b => b.bedCategory === form?.bedCategory && b._id !== id)
       .map(b => b.bedNo)
   );
-  const availableBeds = (BED_CATEGORIES.find(c => c.category === form?.bedCategory)?.beds ?? [])
-    .filter(b => !occupiedNos.has(b));
 
   useEffect(() => {
     if (!id) return;
@@ -106,7 +104,6 @@ export default function IpdEditPatient() {
     setForm((f: any) => ({ ...f, dob: val, ageYears: years, ageMonths: months, ageDays: days }));
   };
 
-  const handleBedCategory = (cat: string) => setForm((f: any) => ({ ...f, bedCategory: cat, bedNo: "" }));
 
   const addDoctor = () => {
     if (!selectedDoc) return;
