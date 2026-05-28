@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   address: "", postOffice: "", policeStation: "", district: "", state: "",
   pin: "", phone: "", altPhone: "", email: "", city: "", country: "India",
   referredBy: "", collCentre: "", organization: "", patientHistory: "",
-  registrationType: "NATIONAL", registrationAmount: 100,
+  registrationType: "NATIONAL", registrationAmount: 100 as number | string,
   
 };
 
@@ -82,7 +82,7 @@ export default function NewPatient() {
         ageYears: Number(form.ageYears) || 0,
         ageMonths: Number(form.ageMonths) || 0,
         ageDays: Number(form.ageDays) || 0,
-       
+        registrationAmount: Number(form.registrationAmount) || 0,
       };
 
       const res = await opdService.createPatient(submissionData);
@@ -260,7 +260,7 @@ export default function NewPatient() {
 
             <div className="space-y-1">
               <Label className="text-xs">Registration Amount (₹)</Label>
-              <Input value={form.registrationAmount} readOnly className="h-9 text-sm bg-gray-50" />
+              <Input type="number" value={form.registrationAmount} onChange={e => set("registrationAmount", e.target.value)} className="h-9 text-sm" />
             </div>
 
             

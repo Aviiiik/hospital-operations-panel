@@ -66,18 +66,27 @@ export default function IpdBedAllotment() {
   const [form,       setForm]       = useState({ ...BLANK_FORM });
   const [liveNow,    setLiveNow]    = useState(() => new Date());
   const [editingId,  setEditingId]  = useState<string | null>(null);
-  const [editEnd,    setEditEnd]    = useState({ endDate: "", endTime: "", charge: "" });
+  const [editEnd,    setEditEnd]    = useState({ allotmentDate: "", allotmentTime: "", endDate: "", endTime: "", charge: "" });
+  const [occupiedBeds, setOccupiedBeds] = useState<{ _id: string; bedCategory: string; bedNo: string }[]>([]);
 
-  const availableBeds = BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [];
+  const occupiedNos = new Set(
+    occupiedBeds
+      .filter(b => b.bedCategory === form.bedCategory && b._id !== id)
+      .map(b => b.bedNo)
+  );
+  const availableBeds = (BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [])
+    .filter(b => !occupiedNos.has(b));
 
   useEffect(() => {
     if (!id) return;
     Promise.all([
       ipdService.getPatient(id),
       ipdService.getBedAllotments(id),
-    ]).then(([pr, ar]) => {
+      ipdService.getOccupiedBeds(),
+    ]).then(([pr, ar, ob]) => {
       setPatient(pr.data.data);
       setAllotments(ar.data.data.allotments || []);
+      setOccupiedBeds(ob.data.data.beds || []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -130,12 +139,16 @@ export default function IpdBedAllotment() {
   };
 
   const handleSaveEnd = async (allotmentId: string) => {
-    if (!editEnd.endDate) return toast.error("End date is required");
     const chargeVal = parseFloat(editEnd.charge);
     if (editEnd.charge !== "" && (isNaN(chargeVal) || chargeVal < 0))
       return toast.error("Enter a valid charge");
     try {
-      const payload: any = { endDate: editEnd.endDate, endTime: editEnd.endTime || undefined };
+      const payload: any = {
+        endDate: editEnd.endDate,
+        endTime: editEnd.endTime || undefined,
+      };
+      if (editEnd.allotmentDate) payload.allotmentDate = editEnd.allotmentDate;
+      if (editEnd.allotmentTime) payload.allotmentTime = editEnd.allotmentTime;
       if (editEnd.charge !== "") payload.charge = chargeVal;
       await ipdService.updateBedAllotment(allotmentId, payload);
       setEditingId(null);
@@ -200,6 +213,10 @@ export default function IpdBedAllotment() {
               <span>{fmtDate(patient.admissionDate)}</span>
             </div>
             <div>
+              <span className="text-xs text-gray-500 block">Attending Doctor(s)</span>
+              <span className="font-medium">{patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</span>
+            </div>
+            <div className="md:col-span-2">
               <span className="text-xs text-gray-500 block">
                 Total Bed Charge
                 {hasManualEstimate && <span className="ml-1 text-amber-600">(manual ref)</span>}
@@ -220,17 +237,17 @@ export default function IpdBedAllotment() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <Label className="text-xs">Bed Category <span className="text-red-500">*</span></Label>
                 <Select value={form.bedCategory || "none"} onValueChange={v => handleBedCategory(v === "none" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-sm">
+                  <SelectTrigger className="h-9 text-sm w-full truncate">
                     <SelectValue placeholder="-- Select --" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-- Select --</SelectItem>
                     {BED_CATEGORIES.map(c => (
                       <SelectItem key={c.category} value={c.category}>
-                        {c.category} — {fmt(BED_CHARGES[c.category] ?? 0)}/day
+                        {c.category}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -256,7 +273,7 @@ export default function IpdBedAllotment() {
                 <Label className="text-xs">Charge / Day (₹)</Label>
                 <Input
                   type="number"
-                  value={form.charge}
+                  value={form.charge || ""}
                   onChange={e => set("charge", Number(e.target.value))}
                   className="h-9 text-sm"
                 />
@@ -296,7 +313,7 @@ export default function IpdBedAllotment() {
                 <Label className="text-xs">Package Days</Label>
                 <Input
                   type="number"
-                  value={form.packageDays}
+                  value={form.packageDays || ""}
                   onChange={e => set("packageDays", Number(e.target.value))}
                   className="h-9 text-sm"
                 />
@@ -372,11 +389,15 @@ export default function IpdBedAllotment() {
               </thead>
               <tbody>
                 {allotments.map(a => {
-                  const days = a.endDate && a.allotmentDate
-                    ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-                    : computeBillingDays(new Date(a.allotmentDate), openEndDate);
-                  const charge = days * (a.charge || 0);
                   const isEditing = editingId === a._id;
+                  const effectiveFrom = isEditing && editEnd.allotmentDate
+                    ? new Date(editEnd.allotmentDate)
+                    : new Date(a.allotmentDate);
+                  const effectiveTo = isEditing
+                    ? (editEnd.endDate ? new Date(editEnd.endDate) : openEndDate)
+                    : (a.endDate ? new Date(a.endDate) : openEndDate);
+                  const days = computeBillingDays(effectiveFrom, effectiveTo);
+                  const charge = days * (isEditing && editEnd.charge !== "" ? parseFloat(editEnd.charge) || 0 : (a.charge || 0));
                   return (
                     <tr key={a._id} className="border-t">
                       <td className="px-4 py-2 font-medium whitespace-nowrap">{a.bedCategory}</td>
@@ -393,24 +414,49 @@ export default function IpdBedAllotment() {
                         ) : fmt(a.charge)}
                       </td>
                       <td className="px-4 py-2 text-gray-600">
-                        {fmtDate(a.allotmentDate)}
-                        {a.allotmentTime ? <span className="text-xs text-gray-400 ml-1">{a.allotmentTime}</span> : ""}
-                      </td>
-                      <td className="px-4 py-2 text-gray-600">
                         {isEditing ? (
                           <div className="flex items-center gap-1">
                             <Input
                               type="date"
-                              value={editEnd.endDate}
-                              onChange={e => setEditEnd(v => ({ ...v, endDate: e.target.value }))}
+                              value={editEnd.allotmentDate}
+                              onChange={e => setEditEnd(v => ({ ...v, allotmentDate: e.target.value }))}
                               className="h-7 text-xs w-32"
                             />
                             <Input
                               type="time"
-                              value={editEnd.endTime}
-                              onChange={e => setEditEnd(v => ({ ...v, endTime: e.target.value }))}
+                              value={editEnd.allotmentTime}
+                              onChange={e => setEditEnd(v => ({ ...v, allotmentTime: e.target.value }))}
                               className="h-7 text-xs w-24"
                             />
+                          </div>
+                        ) : (
+                          <>
+                            {fmtDate(a.allotmentDate)}
+                            {a.allotmentTime ? <span className="text-xs text-gray-400 ml-1">{a.allotmentTime}</span> : ""}
+                          </>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {isEditing ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="date"
+                                value={editEnd.endDate}
+                                onChange={e => setEditEnd(v => ({ ...v, endDate: e.target.value }))}
+                                className="h-7 text-xs w-32"
+                                placeholder="optional"
+                              />
+                              <Input
+                                type="time"
+                                value={editEnd.endTime}
+                                onChange={e => setEditEnd(v => ({ ...v, endTime: e.target.value }))}
+                                className="h-7 text-xs w-24"
+                              />
+                            </div>
+                            {!editEnd.endDate && (
+                              <span className="text-[10px] text-green-600 font-medium">Active (live)</span>
+                            )}
                           </div>
                         ) : a.endDate ? (
                           <>
@@ -460,8 +506,10 @@ export default function IpdBedAllotment() {
                               onClick={() => {
                                 setEditingId(a._id);
                                 setEditEnd({
-                                  endDate: a.endDate ? new Date(a.endDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-                                  endTime: a.endTime || nowTime(),
+                                  allotmentDate: a.allotmentDate ? new Date(a.allotmentDate).toISOString().slice(0, 10) : "",
+                                  allotmentTime: a.allotmentTime || "",
+                                  endDate: a.endDate ? new Date(a.endDate).toISOString().slice(0, 10) : "",
+                                  endTime: a.endDate ? (a.endTime || "") : "",
                                   charge:  String(a.charge || ""),
                                 });
                               }}

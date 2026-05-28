@@ -113,6 +113,20 @@ export default function Dashboard() {
       .then(r => setActivity(r.data.data.activity))
       .catch(() => {})
       .finally(() => setActLoading(false));
+
+    const interval = setInterval(() => {
+      ipdService.getDashboardStats()
+        .then(r => setIpdStats(r.data.data))
+        .catch(() => {});
+      opdService.getDashboardStats()
+        .then(r => setOpdStats(r.data.data))
+        .catch(() => {});
+      opdService.getTodayActivity()
+        .then(r => setActivity(r.data.data.activity))
+        .catch(() => {});
+    }, 60_000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -230,7 +244,7 @@ export default function Dashboard() {
               <div className="text-3xl font-bold text-emerald-700">
                 {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueToday ?? 0)}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Receipts collected</p>
+              <p className="text-xs text-gray-500 mt-1">Receipts today + discharged today</p>
             </CardContent>
           </Card>
         </div>

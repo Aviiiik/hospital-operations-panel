@@ -46,7 +46,7 @@ async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; s
 }
 
 export async function getDoctors() {
-  return User.find({ role: "Doctor", isActive: true })
+  return User.find({ role: "Doctor" })
     .select("name username mobile department specialization shift licenseNumber consultancyFees")
     .sort({ name: 1 });
 }

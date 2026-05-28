@@ -290,6 +290,48 @@ router.delete("/vendors/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Investigation Items routes ───────────────────────────────────────────────
+
+router.get("/investigation-items", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const activeOnly = req.query.all !== "1";
+    const vendorCode = req.query.vendorCode as string | undefined;
+    const items = await ipdService.getInvestigationItems(vendorCode, activeOnly);
+    res.json({ success: true, data: { items } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/investigation-items", requireAdmin, async (req, res) => {
+  try {
+    const item = await ipdService.createInvestigationItem(req.body);
+    res.status(201).json({ success: true, data: item });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put("/investigation-items/:id", requireAdmin, async (req, res) => {
+  try {
+    const item = await ipdService.updateInvestigationItem(req.params.id, req.body);
+    if (!item) return res.status(404).json({ message: "Investigation item not found" });
+    res.json({ success: true, data: item });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete("/investigation-items/:id", requireAdmin, async (req, res) => {
+  try {
+    const item = await ipdService.deleteInvestigationItem(req.params.id);
+    if (!item) return res.status(404).json({ message: "Investigation item not found" });
+    res.json({ success: true, data: item });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ─── Bed Allotment routes ─────────────────────────────────────────────────────
 
 router.get("/bed-allotments/:patientId", requireAdminOrReceptionist, async (req, res) => {

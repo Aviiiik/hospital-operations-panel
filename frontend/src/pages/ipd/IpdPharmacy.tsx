@@ -24,6 +24,7 @@ interface PharmItem {
   unit: string;
   qty: string;
   discount: string;
+  discountType: "%" | "₹";
   totalAmount: number;
   netAmount: number;
 }
@@ -58,7 +59,7 @@ const PACKAGES = ["TABLET", "CAPSULE", "SYRUP", "INJECTION", "CREAM", "OINTMENT"
 
 const BLANK_ITEM: PharmItem = {
   itemName: "", package: "", batchNo: "", expiryDate: "",
-  mrp: "", pQty: "1", unit: "", qty: "1", discount: "0",
+  mrp: "", pQty: "1", unit: "", qty: "1", discount: "0", discountType: "%",
   totalAmount: 0, netAmount: 0,
 };
 
@@ -77,8 +78,10 @@ function calcItem(it: PharmItem): PharmItem {
   const qty  = parseFloat(it.qty)  || 0;
   const disc = parseFloat(it.discount) || 0;
   const total = mrp * qty;
-  const net   = total - (total * disc / 100);
-  return { ...it, totalAmount: total, netAmount: net };
+  const net = it.discountType === "₹"
+    ? Math.max(0, total - disc)
+    : total - (total * disc / 100);
+  return { ...it, totalAmount: total, netAmount: Math.max(0, net) };
 }
 
 // ─── Medicine dropdown with search ───────────────────────────────────────────
@@ -204,8 +207,10 @@ export default function IpdPharmacy() {
       ipdService.getPharmacyBills(id),
       ipdService.getMedicines(true),
     ]).then(([pr, br, mr]) => {
+      const loadedBills: PharmBill[] = br.data.data.bills || [];
       setPatient(pr.data.data);
-      setBills(br.data.data.bills || []);
+      setBills(loadedBills);
+      setExpanded(new Set(loadedBills.map(b => b._id)));
       setMedicines(mr.data.data.medicines || []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
@@ -237,6 +242,7 @@ export default function IpdPharmacy() {
     setItems(bill.items.map(it => ({
       ...it, mrp: String(it.mrp), qty: String(it.qty),
       pQty: String(it.pQty || 1), discount: String(it.discount || 0),
+      discountType: (it as any).discountType || "%",
     })));
     setEditBillId(bill._id);
     setShowForm(true);
@@ -272,7 +278,9 @@ export default function IpdPharmacy() {
         toast.success("Pharmacy bill saved");
       }
       const br = await ipdService.getPharmacyBills(id!);
-      setBills(br.data.data.bills || []);
+      const refreshed: PharmBill[] = br.data.data.bills || [];
+      setBills(refreshed);
+      setExpanded(new Set(refreshed.map(b => b._id)));
       resetForm();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to save");
@@ -356,6 +364,10 @@ export default function IpdPharmacy() {
               <span>{fmtDate(patient.admissionDate)}</span>
             </div>
             <div>
+              <span className="text-xs text-gray-500 block">Attending Doctor(s)</span>
+              <span>{patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</span>
+            </div>
+            <div>
               <span className="text-xs text-gray-500 block">Total Pharmacy Charge</span>
               <span className="font-bold text-green-700">{fmt(totalPharmCharge)}</span>
             </div>
@@ -402,12 +414,12 @@ export default function IpdPharmacy() {
                     <th className="px-2 py-1.5 text-left font-medium w-28">Package</th>
                     <th className="px-2 py-1.5 text-left font-medium w-24">Batch No</th>
                     <th className="px-2 py-1.5 text-left font-medium w-28">Expiry Date</th>
-                    <th className="px-2 py-1.5 text-right font-medium w-20">MRP (₹)</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-16">P.Qty</th>
+                    <th className="px-2 py-1.5 text-right font-medium w-32">MRP (₹)</th>
+                    <th className="px-2 py-1.5 text-center font-medium w-24">P.Qty</th>
                     <th className="px-2 py-1.5 text-left font-medium w-20">Unit</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-16">Qty</th>
+                    <th className="px-2 py-1.5 text-center font-medium w-24">Qty</th>
                     <th className="px-2 py-1.5 text-right font-medium w-20">Total</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-16">Dis(%)</th>
+                    <th className="px-2 py-1.5 text-center font-medium w-28">Discount</th>
                     <th className="px-2 py-1.5 text-right font-medium w-24">Net Total</th>
                     <th className="px-2 py-1.5 w-8"></th>
                   </tr>
@@ -439,7 +451,7 @@ export default function IpdPharmacy() {
                         <Input type="month" value={it.expiryDate} onChange={e => setItem(idx, "expiryDate", e.target.value)} className="h-8 text-xs" />
                       </td>
                       <td className="px-2 py-1">
-                        <Input type="number" value={it.mrp} onChange={e => setItem(idx, "mrp", e.target.value)} className="h-8 text-xs text-right" placeholder="0.00" />
+                        <Input type="number" value={it.mrp} onChange={e => setItem(idx, "mrp", e.target.value)} className="h-8 text-xs text-right w-full min-w-[80px]" placeholder="0.00" />
                       </td>
                       <td className="px-2 py-1">
                         <Input type="number" value={it.pQty} onChange={e => setItem(idx, "pQty", e.target.value)} className="h-8 text-xs text-center" />
@@ -454,7 +466,16 @@ export default function IpdPharmacy() {
                         {fmt(it.totalAmount)}
                       </td>
                       <td className="px-2 py-1">
-                        <Input type="number" value={it.discount} onChange={e => setItem(idx, "discount", e.target.value)} className="h-8 text-xs text-center" placeholder="0" />
+                        <div className="flex items-center gap-1">
+                          <Input type="number" value={it.discount} onChange={e => setItem(idx, "discount", e.target.value)} className="h-8 text-xs text-center w-16" placeholder="0" />
+                          <button
+                            type="button"
+                            onClick={() => setItem(idx, "discountType", it.discountType === "%" ? "₹" : "%")}
+                            className="h-8 w-8 shrink-0 rounded border border-gray-300 text-xs font-semibold hover:bg-gray-100 bg-white"
+                          >
+                            {it.discountType}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-2 py-1 text-right font-semibold text-green-700">
                         {fmt(it.netAmount)}

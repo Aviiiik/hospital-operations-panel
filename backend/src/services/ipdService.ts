@@ -5,6 +5,7 @@ import IpdBedAllotment from "../models/IpdBedAllotment.js";
 import IpdReceipt from "../models/IpdReceipt.js";
 import ServiceCatalogue from "../models/ServiceCatalogue.js";
 import InvestigationVendor from "../models/InvestigationVendor.js";
+import InvestigationItem from "../models/InvestigationItem.js";
 import IpdPharmacyBill from "../models/IpdPharmacyBill.js";
 import PharmacyMedicine from "../models/PharmacyMedicine.js";
 
@@ -315,7 +316,7 @@ export async function getIpdDashboardStats() {
   todayIST.setHours(0, 0, 0, 0);
   const todayStartUTC = new Date(todayIST.getTime() - IST);
 
-  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, revenueAgg] =
+  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, dischargedTodayPatients] =
     await Promise.all([
       IpdPatient.countDocuments({ status: "Admitted" }),
       IpdPatient.countDocuments({ admissionDate: { $gte: todayStartUTC } }),
@@ -326,11 +327,25 @@ export async function getIpdDashboardStats() {
         .limit(8)
         .select("admissionId name title bedNo bedCategory department admissionDate status")
         .lean(),
-      IpdReceipt.aggregate([
-        { $match: { receiptDate: { $gte: todayStartUTC } } },
-        { $group: { _id: null, total: { $sum: { $subtract: ["$receiptAmount", { $ifNull: ["$refund", 0] }] } } } },
-      ]),
+      IpdPatient.find(
+        { status: "Discharged", dischargeDate: { $gte: todayStartUTC } },
+        { _id: 1 }
+      ).lean(),
     ]);
+
+  const dischargedTodayIds = dischargedTodayPatients.map((p: any) => p._id);
+
+  const revenueAgg = await IpdReceipt.aggregate([
+    {
+      $match: {
+        $or: [
+          { receiptDate: { $gte: todayStartUTC } },
+          { patientId: { $in: dischargedTodayIds } },
+        ],
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$receiptAmount" } } },
+  ]);
 
   const revenueToday = (revenueAgg[0]?.total as number) ?? 0;
 
@@ -374,6 +389,43 @@ export async function updateVendor(id: string, data: any) {
 
 export async function deleteVendor(id: string) {
   return InvestigationVendor.findByIdAndDelete(id).lean();
+}
+
+// ─── Investigation Items (Catalogue) ─────────────────────────────────────────
+
+export async function getInvestigationItems(vendorCode?: string, activeOnly = true) {
+  const filter: any = {};
+  if (activeOnly) filter.isActive = true;
+  if (vendorCode) filter.vendorCode = vendorCode;
+  return InvestigationItem.find(filter).sort({ category: 1, slNo: 1 }).lean();
+}
+
+export async function createInvestigationItem(data: any) {
+  const item = new InvestigationItem({
+    slNo:        data.slNo,
+    name:        data.name,
+    category:    data.category,
+    labRate:     Number(data.labRate)     || 0,
+    patientRate: Number(data.patientRate) || 0,
+    vendorCode:  data.vendorCode,
+    vendorName:  data.vendorName,
+    isActive:    data.isActive !== false,
+  });
+  await item.save();
+  return item;
+}
+
+export async function updateInvestigationItem(id: string, data: any) {
+  const allowed = ["slNo", "name", "category", "labRate", "patientRate", "vendorCode", "vendorName", "isActive"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (update.labRate     !== undefined) update.labRate     = Number(update.labRate)     || 0;
+  if (update.patientRate !== undefined) update.patientRate = Number(update.patientRate) || 0;
+  return InvestigationItem.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteInvestigationItem(id: string) {
+  return InvestigationItem.findByIdAndDelete(id).lean();
 }
 
 // ─── Bed Allotment ────────────────────────────────────────────────────────────

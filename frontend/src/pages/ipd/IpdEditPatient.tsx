@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee, BedDouble, Receipt, Pill } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee, BedDouble, Receipt, Pill, ChevronDown } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS, DISCHARGE_TYPES,
@@ -15,6 +16,26 @@ import opdService from "@/services/opdService";
 
 const TITLES  = ["Mr", "Mrs", "Ms", "Dr", "Baby", "Master"];
 const GENDERS = ["Male", "Female", "Other"];
+
+const TPA_LIST = [
+  "HERITAGE HEALTH INSURANCE TPA", "GENINS INSURANCE TPA", "MED-SAVE INSURANCE TPA",
+  "PARAMOUNT INSURANCE TPA", "MD-INDIA INSURANCE TPA", "MEDI - ASSIS INSURANCE TPA",
+  "RAKSHA INSURANCE TPA", "FAMILY HEALTH INSURANCE TPA", "HEALTH INDIA INSURANCE TPA",
+  "PAREKH INSURANCE TPA", "VIDAL INSURANCE TPA", "SAFEWAY INSURANCE TPA",
+  "HEALTH INSURANCE TPA", "ALANKIT INSURANCE TPA", "GOOD HEALTH INSURANCE TPA",
+];
+
+const INSURANCE_LIST = [
+  "ICICI LOMBARD GENERAL INSURANCE", "FUTURE GENERALI INSURANCE", "BAJAJ ALIANZ GENERAL INSURANCE",
+  "IFFCO-TOKIO GENERAL INSURANCE", "HDFC ERGO GENERAL INSURANCE", "CIGNA MANIPAL GENERAL INSURANCE",
+  "UNIVERSAL SAMPO GENERAL INSURANCE", "ROYAL SUNDARAM GENERAL INSURANCE", "TATA AIG GENERAL INSURANCE",
+  "RELIANCE GENERAL INSURANCE", "CHOLA MANDALAM GENERAL INSURANCE", "MAGMA HDI GENERAL INSURANCE",
+  "ACKO GENERAL INSURANCE", "NAVI GENERAL INSURANCE CO.", "GO DIGIT GENERAL INSURANCE CO.",
+  "NATIONAL INSURANCE CO. LTD", "NEW INDIA ASSURANCE CO. LTD", "UNITED INDIA INSURANCE CO. LTD",
+  "ORIENTAL INSURANCE CO. LTD",
+];
+
+const normStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function calcAge(dob: string) {
   if (!dob) return { years: "", months: "", days: "" };
@@ -34,15 +55,23 @@ export default function IpdEditPatient() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState<any>(null);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [form, setForm]               = useState<any>(null);
+  const [doctors, setDoctors]         = useState<Doctor[]>([]);
   const [selectedDoc, setSelectedDoc] = useState("");
   const [specFilter, setSpecFilter]   = useState("");
+  const [docOpen, setDocOpen]         = useState(false);
   const [allDoctors, setAllDoctors]   = useState<{ _id: string; name: string; specialization: string; department: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [occupiedBeds, setOccupiedBeds] = useState<{ _id: string; bedCategory: string; bedNo: string }[]>([]);
 
-  const availableBeds = BED_CATEGORIES.find(c => c.category === form?.bedCategory)?.beds ?? [];
+  const occupiedNos = new Set(
+    occupiedBeds
+      .filter(b => b.bedCategory === form?.bedCategory && b._id !== id)
+      .map(b => b.bedNo)
+  );
+  const availableBeds = (BED_CATEGORIES.find(c => c.category === form?.bedCategory)?.beds ?? [])
+    .filter(b => !occupiedNos.has(b));
 
   useEffect(() => {
     if (!id) return;
@@ -62,7 +91,9 @@ export default function IpdEditPatient() {
 
     opdService.getDoctors().then(r => {
       setAllDoctors(r.data.data.doctors || []);
-    }).catch(() => {});
+    }).catch(err => console.error("Failed to load doctors", err));
+
+    ipdService.getOccupiedBeds().then(r => setOccupiedBeds(r.data.data.beds || [])).catch(() => {});
   }, [id]);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
@@ -91,6 +122,11 @@ export default function IpdEditPatient() {
     setDoctors(prev => prev.filter((_, i) => i !== idx).map((d, i) => ({ ...d, slNo: i + 1 })));
   };
 
+  const docHits = allDoctors.filter(d =>
+    (!specFilter || d.specialization === specFilter) &&
+    (!selectedDoc || normStr(d.name).includes(normStr(selectedDoc)))
+  );
+
   const handleSave = async () => {
     if (!form.name?.trim())  return toast.error("Patient name is required");
     if (!form.gender)        return toast.error("Gender is required");
@@ -108,7 +144,6 @@ export default function IpdEditPatient() {
       };
       await ipdService.updatePatient(id!, payload);
       toast.success("Patient record updated successfully");
-      navigate("/ipd/search");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update patient");
     } finally {
@@ -240,23 +275,12 @@ export default function IpdEditPatient() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Bed Category</Label>
-              <Select value={form.bedCategory || "none"} onValueChange={v => handleBedCategory(v === "none" ? "" : v)}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="-- Select --" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">-- Select --</SelectItem>
-                  {BED_CATEGORIES.map(c => <SelectItem key={c.category} value={c.category}>{c.category}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input value={form.bedCategory || "—"} disabled className="h-9 text-sm bg-gray-50 text-gray-500 cursor-not-allowed" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Bed No</Label>
-              <Select value={form.bedNo || "none"} onValueChange={v => set("bedNo", v === "none" ? "" : v)} disabled={!form.bedCategory}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="-- Select --" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">-- Select --</SelectItem>
-                  {availableBeds.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input value={form.bedNo || "—"} disabled className="h-9 text-sm bg-gray-50 text-gray-500 cursor-not-allowed" />
+              <p className="text-xs text-amber-600 mt-0.5">To change bed, use <button type="button" className="underline font-medium hover:text-amber-700" onClick={() => navigate(`/ipd/bed-allotment/${id}`)}>Bed Allotment</button>.</p>
             </div>
           </div>
         </CardContent>
@@ -297,9 +321,9 @@ export default function IpdEditPatient() {
             <div className="space-y-1">
               <Label className="text-xs">Age (Yrs / Mon / Days)</Label>
               <div className="flex gap-1">
-                <Input value={form.ageYears  ?? ""} onChange={e => set("ageYears",  e.target.value)} placeholder="Yrs" className="h-9 text-sm text-center" />
-                <Input value={form.ageMonths ?? ""} onChange={e => set("ageMonths", e.target.value)} placeholder="Mon" className="h-9 text-sm text-center" />
-                <Input value={form.ageDays   ?? ""} onChange={e => set("ageDays",   e.target.value)} placeholder="Day" className="h-9 text-sm text-center" />
+                <Input value={form.ageYears  || ""} onChange={e => set("ageYears",  e.target.value)} placeholder="Yrs" className="h-9 text-sm text-center" />
+                <Input value={form.ageMonths || ""} onChange={e => set("ageMonths", e.target.value)} placeholder="Mon" className="h-9 text-sm text-center" />
+                <Input value={form.ageDays   || ""} onChange={e => set("ageDays",   e.target.value)} placeholder="Day" className="h-9 text-sm text-center" />
               </div>
             </div>
 
@@ -404,9 +428,9 @@ export default function IpdEditPatient() {
       </Card>
 
       {/* Under Doctor */}
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader className="pb-3"><CardTitle className="text-base">Under Doctor</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 overflow-visible">
           {/* Filters row */}
           <div className="flex gap-2 flex-wrap">
             {/* Specialization filter */}
@@ -419,18 +443,40 @@ export default function IpdEditPatient() {
                 ))}
               </SelectContent>
             </Select>
-            {/* Doctor select — filtered by specialization */}
-            <Select value={selectedDoc || "none"} onValueChange={v => setSelectedDoc(v === "none" ? "" : v)}>
-              <SelectTrigger className="h-9 text-sm flex-1 min-w-48"><SelectValue placeholder="Select doctor…" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">-- Select doctor --</SelectItem>
-                {allDoctors
-                  .filter(d => !specFilter || d.specialization === specFilter)
-                  .map(d => (
-                    <SelectItem key={d._id} value={d.name}>{d.name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <div className="relative flex-1 min-w-48">
+              <div className="relative">
+                <Input
+                  value={selectedDoc}
+                  onChange={e => { setSelectedDoc(e.target.value); setDocOpen(true); }}
+                  onFocus={() => setDocOpen(true)}
+                  onBlur={() => setTimeout(() => setDocOpen(false), 150)}
+                  placeholder="Search doctor…"
+                  className="h-9 text-sm pr-8"
+                />
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+              {docOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-52 overflow-y-auto">
+                  {docHits.length === 0
+                    ? <div className="px-3 py-2 text-sm text-muted-foreground">{allDoctors.length === 0 ? "Loading doctors…" : "No doctors found"}</div>
+                    : docHits.map(d => (
+                        <div key={d._id}
+                          onMouseDown={() => {
+                            const name = d.name;
+                            if (!doctors.some(ex => ex.doctorName === name)) {
+                              setDoctors(prev => [...prev, { slNo: prev.length + 1, doctorName: name }]);
+                            }
+                            setSelectedDoc("");
+                            setDocOpen(false);
+                          }}
+                          className="px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground">
+                          {d.name}
+                        </div>
+                      ))
+                  }
+                </div>
+              )}
+            </div>
             <Button type="button" size="sm" className="h-9 bg-red-600 hover:bg-red-700 shrink-0" onClick={addDoctor}>
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -502,7 +548,7 @@ export default function IpdEditPatient() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Charge (₹)</Label>
-              <Input type="number" value={form.packageCharge ?? 0} onChange={e => set("packageCharge", e.target.value)} className="h-9 text-sm" min={0} />
+              <Input type="number" value={form.packageCharge || ""} onChange={e => set("packageCharge", e.target.value)} className="h-9 text-sm" min={0} />
             </div>
           </div>
         </CardContent>
@@ -523,14 +569,20 @@ export default function IpdEditPatient() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Insurance Company</Label>
+              <SearchableSelect options={INSURANCE_LIST} value={form.insuranceCo || ""} onChange={v => set("insuranceCo", v)} placeholder="Search insurance..." />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">TPA</Label>
+              <SearchableSelect options={TPA_LIST} value={form.tpa || ""} onChange={v => set("tpa", v)} placeholder="Search TPA..." />
+            </div>
             {[
-              { label: "Insurance Company", field: "insuranceCo"        },
-              { label: "TPA",               field: "tpa"                },
-              { label: "Card No",           field: "cardNo"             },
-              { label: "Policy No",         field: "policyNo"           },
-              { label: "Claim No",          field: "claimNo"            },
-              { label: "Registration No",   field: "ipdRegistrationNo"  },
-              { label: "Other Details",     field: "otherDetails"       },
+              { label: "Card No",         field: "cardNo"            },
+              { label: "Policy No",       field: "policyNo"          },
+              { label: "Claim No",        field: "claimNo"           },
+              { label: "Registration No", field: "ipdRegistrationNo" },
+              { label: "Other Details",   field: "otherDetails"      },
             ].map(({ label, field }) => (
               <div key={field} className="space-y-1">
                 <Label className="text-xs">{label}</Label>

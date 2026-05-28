@@ -309,6 +309,12 @@ export default function IpdReceipt() {
   const [saving,        setSaving]        = useState(false);
   const [showForm,      setShowForm]      = useState(false);
   const [form,          setForm]          = useState({ ...BLANK });
+  const [liveNow,       setLiveNow]       = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setLiveNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -341,22 +347,25 @@ export default function IpdReceipt() {
   const servicesGross   = billSummary?.gross    ?? 0;
   const servicesDis     = billSummary?.discount ?? 0;
 
-  const fallbackEndDate = patient?.dischargeDate ? new Date(patient.dischargeDate) : null;
+  const openEndDate = patient?.dischargeDate
+    ? new Date(patient.dischargeDate)
+    : patient?.estimateEndDate
+      ? new Date(patient.estimateEndDate)
+      : liveNow;
 
   const computedBedTotal = bedAllotments.length > 0
     ? bedAllotments.reduce((s: number, a: any) => {
         const days = a.endDate && a.allotmentDate
           ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : (a.allotmentDate && fallbackEndDate
-              ? computeBillingDays(new Date(a.allotmentDate), fallbackEndDate)
+          : (a.allotmentDate
+              ? computeBillingDays(new Date(a.allotmentDate), openEndDate)
               : 1);
         return s + days * (a.charge || 0);
       }, 0)
     : (() => {
         const rate = patient?.bedCategory ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
-        const endDate = patient?.dischargeDate ? new Date(patient.dischargeDate) : fallbackEndDate;
-        const days = patient?.admissionDate && endDate
-          ? computeBillingDays(new Date(patient.admissionDate), endDate)
+        const days = patient?.admissionDate
+          ? computeBillingDays(new Date(patient.admissionDate), openEndDate)
           : 1;
         return rate * days;
       })();
@@ -459,8 +468,8 @@ export default function IpdReceipt() {
               <span className="truncate block">{patient.address || "—"}</span>
             </div>
             <div>
-              <span className="text-xs text-gray-500 block">Admitted By</span>
-              <span>{patient.admittedBy || "—"}</span>
+              <span className="text-xs text-gray-500 block">Attending Doctor(s)</span>
+              <span>{patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</span>
             </div>
             <div>
               <span className="text-xs text-gray-500 block">Contact No</span>
