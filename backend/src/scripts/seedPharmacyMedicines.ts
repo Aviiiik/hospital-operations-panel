@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { PDFParse } from "pdf-parse";
+import pdfParse from "pdf-parse";
 import PharmacyMedicine from "../models/PharmacyMedicine.js";
  
 dotenv.config();
@@ -23,7 +23,7 @@ async function extractMedicinesFromPdf(pdfPath: string): Promise<Array<{ itemCod
   const rowPattern = /^(.+?)\(([A-Za-z0-9_.* -]+)\)\s+\d{6,}\s+\d+\s+\d+\s+[\d.]+$/;
  
   const buffer = fs.readFileSync(pdfPath);
-  const data   = await new PDFParse({ data: buffer }).getText();
+  const data   = await pdfParse(buffer);
  
   const seen = new Map<string, string>(); // itemCode -> termName
  
