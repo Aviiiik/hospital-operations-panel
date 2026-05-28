@@ -56,6 +56,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
 export default function HospitalLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -181,7 +182,7 @@ export default function HospitalLayout() {
             {sidebarOpen && <span className="ml-2">Change Password</span>}
           </Button>
           <Button
-            onClick={logout}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             variant="ghost"
             className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700"
             title={!sidebarOpen ? "Logout" : undefined}
@@ -190,6 +191,34 @@ export default function HospitalLayout() {
             {sidebarOpen && <span className="ml-2">Logout</span>}
           </Button>
         </div>
+
+        {/* Logout confirmation dialog */}
+        {isLogoutConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-80 flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                  <LogOut className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">Confirm Logout</p>
+                  <p className="text-sm text-gray-500">Are you sure you want to log out?</p>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setIsLogoutConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => { setIsLogoutConfirmOpen(false); logout(); }}
+                >
+                  Logout
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <ChangePasswordModal
           isOpen={isChangePasswordOpen}
