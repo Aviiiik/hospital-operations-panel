@@ -244,7 +244,7 @@ export default function InvestigationItems() {
                       {cat} — {grouped[cat].length} tests
                     </td>
                   </tr>
-                  {grouped[cat].map((item, i) => (
+                  {grouped[cat].map((item) => (
                     <tr key={item._id} className="border-b last:border-0 hover:bg-gray-50">
                       <td className="px-3 py-2 font-mono text-gray-500">{item.slNo ?? "—"}</td>
                       <td className="px-3 py-2 font-medium text-gray-800">{item.name}</td>
