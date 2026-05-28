@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import ReactDOM from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
-import ipdService, { InvestigationVendor } from "@/services/ipdService";
+import ipdService, { InvestigationVendor, InvestigationItem } from "@/services/ipdService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,132 @@ function fmtDate(iso: string) {
   });
 }
 
+// ─── TestSelect: searchable dropdown for a single investigation item row ──────
+
+interface TestSelectProps {
+  value: string;
+  catalogueItems: InvestigationItem[];
+  filterCategory?: string;
+  onSelect: (item: InvestigationItem | null, typedValue: string) => void;
+}
+
+function TestSelect({ value, catalogueItems, filterCategory, onSelect }: TestSelectProps) {
+  const [open, setOpen]     = useState(false);
+  const [query, setQuery]   = useState(value);
+  const inputRef            = useRef<HTMLInputElement>(null);
+  const dropRef             = useRef<HTMLDivElement>(null);
+  const [dropRect, setDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  const updateRect = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropRect({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 320) });
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    updateRect();
+    function handleOutside(e: MouseEvent) {
+      const t = e.target as Node;
+      if (inputRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
+      setQuery(value);
+    }
+    function onScroll() { updateRect(); }
+    document.addEventListener("mousedown", handleOutside);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, value]);
+
+  const grouped = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = filterCategory
+      ? catalogueItems.filter(i => i.category === filterCategory)
+      : catalogueItems;
+    const filtered = q
+      ? base.filter(i => i.name.toLowerCase().includes(q))
+      : base;
+    const map: Record<string, InvestigationItem[]> = {};
+    for (const item of filtered) {
+      if (!map[item.category]) map[item.category] = [];
+      map[item.category].push(item);
+    }
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  }, [query, catalogueItems, filterCategory]);
+
+  const totalCount = grouped.reduce((s, [, arr]) => s + arr.length, 0);
+
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value);
+    onSelect(null, e.target.value);
+    setOpen(true);
+  }
+
+  function handlePick(item: InvestigationItem) {
+    setQuery(item.name);
+    setOpen(false);
+    onSelect(item, item.name);
+  }
+
+  const dropdown = open && dropRect && ReactDOM.createPortal(
+    <div
+      ref={dropRef}
+      style={{ position: "fixed", top: dropRect.top, left: dropRect.left, width: dropRect.width, zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-md shadow-xl max-h-64 overflow-y-auto text-xs"
+    >
+      {totalCount === 0 ? (
+        <div className="px-3 py-3 text-gray-400 text-center">No tests found</div>
+      ) : (
+        grouped.map(([cat, arr]) => (
+          <div key={cat}>
+            <div className="sticky top-0 px-2 py-1 bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wide border-b">
+              {cat}
+            </div>
+            {arr.map(item => (
+              <div
+                key={item._id}
+                onMouseDown={e => { e.preventDefault(); handlePick(item); }}
+                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-blue-50 hover:text-blue-700
+                  ${value === item.name ? "bg-blue-50 font-medium" : ""}`}
+              >
+                <span className="flex-1 truncate">{item.name}</span>
+                {item.patientRate > 0 && (
+                  <span className="ml-2 text-[10px] text-gray-400 shrink-0">₹{item.patientRate}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ))
+      )}
+    </div>,
+    document.body
+  );
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        value={query}
+        onChange={handleInput}
+        onFocus={() => { updateRect(); setOpen(true); }}
+        placeholder="Search or type test…"
+        className="h-7 w-full border rounded text-xs px-1.5 pr-6 bg-white focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <ChevronDown
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 cursor-pointer"
+        onMouseDown={e => { e.preventDefault(); updateRect(); setOpen(v => !v); }}
+      />
+      {dropdown}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function IpdInvestigation() {
@@ -85,6 +212,7 @@ export default function IpdInvestigation() {
   const [patient,        setPatient]        = useState<any>(null);
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [vendors,        setVendors]        = useState<InvestigationVendor[]>([]);
+  const [vendorItems,    setVendorItems]    = useState<InvestigationItem[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [saving,         setSaving]         = useState(false);
   const [listOpen,       setListOpen]       = useState(true);
@@ -133,6 +261,16 @@ export default function IpdInvestigation() {
     if (patient) setReferredBy(patient.doctors?.[0]?.doctorName || "");
   }, [patient]);
 
+  // ── Load catalogue items when vendor changes ───────────────────────────────
+  useEffect(() => {
+    if (vendorId === "__none__") { setVendorItems([]); return; }
+    const vendor = vendors.find(v => v._id === vendorId);
+    if (!vendor) { setVendorItems([]); return; }
+    ipdService.getInvestigationItems(vendor.code)
+      .then(res => setVendorItems(res.data.data.items || []))
+      .catch(() => setVendorItems([]));
+  }, [vendorId, vendors]);
+
   // ── Form helpers ───────────────────────────────────────────────────────────
   const resetForm = () => {
     setEditingId(null);
@@ -160,7 +298,6 @@ export default function IpdInvestigation() {
     setRemarks(inv.remarks || "");
     setVendorBillNo(inv.vendorBillNo || "");
     setIsUrgent(inv.isUrgent || false);
-    // resolve saved vendor name back to _id
     const found = vendors.find(v => v.name === inv.vendor);
     setVendorId(found ? found._id : "__none__");
     setItems(
@@ -188,6 +325,22 @@ export default function IpdInvestigation() {
       const updated = { ...it, [field]: val };
       if (field === "amount" && !it.netAmount) updated.netAmount = val;
       return updated;
+    }));
+  };
+
+  // When a catalogue test is selected in a row, auto-fill fields
+  const handleTestSelect = (idx: number, catalogueItem: InvestigationItem | null, typedValue: string) => {
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it;
+      if (!catalogueItem) return { ...it, description: typedValue };
+      return {
+        ...it,
+        code:        catalogueItem.slNo ? String(catalogueItem.slNo) : it.code,
+        description: catalogueItem.name,
+        category:    catalogueItem.category,
+        amount:      catalogueItem.labRate > 0 ? String(catalogueItem.labRate) : "",
+        netAmount:   catalogueItem.patientRate > 0 ? String(catalogueItem.patientRate) : "",
+      };
     }));
   };
 
@@ -506,6 +659,11 @@ export default function IpdInvestigation() {
                   <Plus className="h-4 w-4" />
                 </button>
               </div>
+              {vendorItems.length > 0 && (
+                <p className="text-[10px] text-blue-500 mt-0.5">
+                  {vendorItems.length} tests available — search in Description
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-gray-500">Vendor Bill No</Label>
@@ -536,7 +694,7 @@ export default function IpdInvestigation() {
                   <tr className="bg-gray-50 border-b text-gray-600">
                     <th className="px-2 py-2 text-center font-medium w-8">#</th>
                     <th className="px-2 py-2 text-left font-medium w-16">Code</th>
-                    <th className="px-2 py-2 text-left font-medium">Description</th>
+                    <th className="px-2 py-2 text-left font-medium min-w-52">Description</th>
                     <th className="px-2 py-2 text-right font-medium w-24">Amount (₹)</th>
                     <th className="px-2 py-2 text-left font-medium w-30">Report Date</th>
                     <th className="px-2 py-2 text-left font-medium w-24">Remark</th>
@@ -556,9 +714,19 @@ export default function IpdInvestigation() {
                           className="h-7 text-xs px-1.5" placeholder="Code" />
                       </td>
                       <td className="px-1 py-1.5">
-                        <Input value={item.description}
-                          onChange={e => setItem(idx, "description", e.target.value)}
-                          className="h-7 text-xs px-1.5" placeholder="Description *" />
+                        {vendorItems.length > 0 ? (
+                          <TestSelect
+                            value={item.description}
+                            catalogueItems={vendorItems}
+                            filterCategory={item.category || undefined}
+                            onSelect={(catalogueItem, typedValue) =>
+                              handleTestSelect(idx, catalogueItem, typedValue)}
+                          />
+                        ) : (
+                          <Input value={item.description}
+                            onChange={e => setItem(idx, "description", e.target.value)}
+                            className="h-7 text-xs px-1.5" placeholder="Description *" />
+                        )}
                       </td>
                       <td className="px-1 py-1.5">
                         <Input type="number" value={item.amount} min={0}

@@ -67,17 +67,26 @@ export default function IpdBedAllotment() {
   const [liveNow,    setLiveNow]    = useState(() => new Date());
   const [editingId,  setEditingId]  = useState<string | null>(null);
   const [editEnd,    setEditEnd]    = useState({ allotmentDate: "", allotmentTime: "", endDate: "", endTime: "", charge: "" });
+  const [occupiedBeds, setOccupiedBeds] = useState<{ _id: string; bedCategory: string; bedNo: string }[]>([]);
 
-  const availableBeds = BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [];
+  const occupiedNos = new Set(
+    occupiedBeds
+      .filter(b => b.bedCategory === form.bedCategory && b._id !== id)
+      .map(b => b.bedNo)
+  );
+  const availableBeds = (BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [])
+    .filter(b => !occupiedNos.has(b));
 
   useEffect(() => {
     if (!id) return;
     Promise.all([
       ipdService.getPatient(id),
       ipdService.getBedAllotments(id),
-    ]).then(([pr, ar]) => {
+      ipdService.getOccupiedBeds(),
+    ]).then(([pr, ar, ob]) => {
       setPatient(pr.data.data);
       setAllotments(ar.data.data.allotments || []);
+      setOccupiedBeds(ob.data.data.beds || []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -228,17 +237,17 @@ export default function IpdBedAllotment() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <Label className="text-xs">Bed Category <span className="text-red-500">*</span></Label>
                 <Select value={form.bedCategory || "none"} onValueChange={v => handleBedCategory(v === "none" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-sm">
+                  <SelectTrigger className="h-9 text-sm w-full truncate">
                     <SelectValue placeholder="-- Select --" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-- Select --</SelectItem>
                     {BED_CATEGORIES.map(c => (
                       <SelectItem key={c.category} value={c.category}>
-                        {c.category} — {fmt(BED_CHARGES[c.category] ?? 0)}/day
+                        {c.category}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -264,7 +273,7 @@ export default function IpdBedAllotment() {
                 <Label className="text-xs">Charge / Day (₹)</Label>
                 <Input
                   type="number"
-                  value={form.charge}
+                  value={form.charge || ""}
                   onChange={e => set("charge", Number(e.target.value))}
                   className="h-9 text-sm"
                 />
@@ -304,7 +313,7 @@ export default function IpdBedAllotment() {
                 <Label className="text-xs">Package Days</Label>
                 <Input
                   type="number"
-                  value={form.packageDays}
+                  value={form.packageDays || ""}
                   onChange={e => set("packageDays", Number(e.target.value))}
                   className="h-9 text-sm"
                 />

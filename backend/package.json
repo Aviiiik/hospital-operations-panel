@@ -12,7 +12,8 @@
     "seed:doctors": "tsx src/scripts/seedDoctors.ts",
     "seed:users": "tsx src/scripts/seeduser.ts",
     "seed:vendors": "tsx src/scripts/seedVendors.ts",
-    "seed:medicines": "tsx src/scripts/seedPharmacyMedicines.ts"
+    "seed:medicines": "tsx src/scripts/seedPharmacyMedicines.ts",
+    "seed:investigation-items": "tsx src/scripts/seedInvestigationItems.ts"
   },
   "keywords": [],
   "author": "",

@@ -23,6 +23,16 @@ interface BillingEntry {
   doctorName?: string;
 }
 
+interface InvLineItem {
+  slNo: number;
+  code: string;
+  description: string;
+  amount: number;
+  netAmount: number;
+  category: string;
+  remark: string;
+}
+
 interface Investigation {
   _id: string;
   reqNo: string;
@@ -30,6 +40,7 @@ interface Investigation {
   vendor?: string;
   vendorBillNo?: string;
   totalAmount: number;
+  items: InvLineItem[];
 }
 
 interface BedAllotment {
@@ -42,6 +53,25 @@ interface BedAllotment {
   endDate?: string;
   endTime?: string;
   isCurrent?: boolean;
+}
+
+interface PharmItem {
+  itemName: string;
+  package: string;
+  qty: string | number;
+  mrp: string | number;
+  discount: string | number;
+  netAmount: number;
+}
+
+interface PharmBill {
+  _id: string;
+  billNo: string;
+  billDate: string;
+  vendor?: string;
+  referredBy?: string;
+  items: PharmItem[];
+  netAmount: number;
 }
 
 interface ReceiptSummary {
@@ -126,7 +156,7 @@ function patientInfoBlock(patient: any) {
 }
 
 function totalsBlock(
-  totalBedCharge: number, servicesNet: number, invTotal: number,
+  totalBedCharge: number, servicesNet: number, invTotal: number, pharmTotal: number,
   servicesDiscount: number, grandTotal: number,
   receiptSummary: ReceiptSummary | null,
 ) {
@@ -140,7 +170,8 @@ function totalsBlock(
     <div class="totals-row"><span>Total Bed Charge</span><span class="bold">${fmt(totalBedCharge)}</span></div>
     <div class="totals-row"><span>Nursing Home Charge</span><span class="bold">${fmt(servicesNet)}</span></div>
     ${invTotal > 0 ? `<div class="totals-row"><span>Investigations</span><span class="bold">${fmt(invTotal)}</span></div>` : ""}
-    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesNet + invTotal)}</span></div>
+    ${pharmTotal > 0 ? `<div class="totals-row"><span>Pharmacy</span><span class="bold">${fmt(pharmTotal)}</span></div>` : ""}
+    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesNet + invTotal + pharmTotal)}</span></div>
     ${servicesDiscount > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Less Discount</span><span>${fmt(servicesDiscount)}</span></div>` : ""}
     <div class="totals-sep"></div>
     <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(grandTotal)}</span></div>
@@ -162,12 +193,14 @@ function buildDetailedBillHtml(
   entries: BillingEntry[],
   investigations: Investigation[],
   bedAllotments: BedAllotment[],
+  pharmBills: PharmBill[],
   fallbackBed: { rate: number; days: number; charge: number } | null,
   estEndDate: Date | null,
   totalBedCharge: number,
   servicesDiscount: number,
   servicesNet: number,
   invTotal: number,
+  pharmTotal: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   logo: string,
@@ -198,14 +231,30 @@ function buildDetailedBillHtml(
       <td class="right bold">${fmt(e.totalCharge)}</td>
     </tr>`).join("");
 
-  const invRows = investigations.map((inv, i) => `
+  const invRows = investigations.flatMap(inv =>
+    (inv.items || []).filter(it => it.description).map(it => `
     <tr>
-      <td>${i + 1}</td>
-      <td style="font-family:monospace">${inv.reqNo}</td>
+      <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
       <td>${fmtDate(inv.reqDate)}</td>
-      <td>${inv.vendor || "—"}</td>
-      <td class="right bold">${fmt(inv.totalAmount || 0)}</td>
-    </tr>`).join("");
+      <td>${it.description}</td>
+      <td>${it.category || "—"}</td>
+      <td class="right bold">${fmt(it.netAmount || 0)}</td>
+    </tr>`)
+  ).join("");
+
+  const pharmRows = pharmBills.flatMap(bill =>
+    bill.items.map(it => `
+    <tr>
+      <td style="font-family:monospace;font-size:10px">${bill.billNo}</td>
+      <td>${fmtDate(bill.billDate)}</td>
+      <td>${it.itemName}</td>
+      <td>${it.package || "—"}</td>
+      <td class="center">${it.qty}</td>
+      <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
+      <td class="center">${it.discount || 0}%</td>
+      <td class="right bold">${fmt(it.netAmount)}</td>
+    </tr>`)
+  ).join("");
 
   const fallbackBedRow = !bedAllotments.length && fallbackBed ? `
     <tr>
@@ -255,14 +304,24 @@ ${showBedSection ? `
 ${investigations.length > 0 ? `
 <h2>Investigations</h2>
 <table>
-  <thead><tr><th>#</th><th>Req No</th><th>Date</th><th>Vendor</th><th class="right">Amount</th></tr></thead>
+  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th></tr></thead>
   <tbody>
     ${invRows}
     <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td></tr>
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesNet, invTotal, servicesDiscount, grandTotal, receiptSummary)}`;
+${pharmBills.length > 0 ? `
+<h2>Pharmacy</h2>
+<table>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Dis%</th><th class="right">Net Amt</th></tr></thead>
+  <tbody>
+    ${pharmRows}
+    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
+  </tbody>
+</table>` : ""}
+
+${totalsBlock(totalBedCharge, servicesNet, invTotal, pharmTotal, servicesDiscount, grandTotal, receiptSummary)}`;
 }
 
 function buildSummaryBillHtml(
@@ -276,9 +335,12 @@ function buildSummaryBillHtml(
   servicesDiscount: number,
   servicesNet: number,
   invTotal: number,
+  pharmTotal: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   logo: string,
+  investigations: Investigation[],
+  pharmBills: PharmBill[],
 ) {
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
@@ -351,13 +413,45 @@ ${showBedSection ? `
 ${invTotal > 0 ? `
 <h2>Investigations</h2>
 <table>
-  <thead><tr><th>Description</th><th class="right">Amount</th></tr></thead>
+  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th></tr></thead>
   <tbody>
-    <tr><td>Investigations Total</td><td class="right bold">${fmt(invTotal)}</td></tr>
+    ${investigations.flatMap(inv =>
+      (inv.items || []).filter((it: any) => it.description).map((it: any) => `
+      <tr>
+        <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
+        <td>${fmtDate(inv.reqDate)}</td>
+        <td>${it.description}</td>
+        <td>${it.category || "—"}</td>
+        <td class="right bold">${fmt(it.netAmount || 0)}</td>
+      </tr>`)
+    ).join("")}
+    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td></tr>
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesNet, invTotal, servicesDiscount, grandTotal, receiptSummary)}`;
+${pharmTotal > 0 ? `
+<h2>Pharmacy</h2>
+<table>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Dis%</th><th class="right">Net Amt</th></tr></thead>
+  <tbody>
+    ${pharmBills.flatMap((bill: any) =>
+      bill.items.map((it: any) => `
+      <tr>
+        <td style="font-family:monospace;font-size:10px">${bill.billNo}</td>
+        <td>${fmtDate(bill.billDate)}</td>
+        <td>${it.itemName}</td>
+        <td>${it.package || "—"}</td>
+        <td class="center">${it.qty}</td>
+        <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
+        <td class="center">${it.discount || 0}%</td>
+        <td class="right bold">${fmt(it.netAmount)}</td>
+      </tr>`)
+    ).join("")}
+    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
+  </tbody>
+</table>` : ""}
+
+${totalsBlock(totalBedCharge, servicesNet, invTotal, pharmTotal, servicesDiscount, grandTotal, receiptSummary)}`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -370,7 +464,7 @@ export default function IpdBilling() {
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [bedAllotments,  setBedAllotments]  = useState<BedAllotment[]>([]);
   const [receiptSummary, setReceiptSummary] = useState<ReceiptSummary | null>(null);
-  const [pharmTotal,     setPharmTotal]     = useState(0);
+  const [pharmBills,     setPharmBills]     = useState<PharmBill[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [overrideInput,  setOverrideInput]  = useState("");
   const [overrideSaved,  setOverrideSaved]  = useState<number | null>(null);
@@ -391,7 +485,7 @@ export default function IpdBilling() {
       ipdService.getInvestigations(id),
       ipdService.getBedAllotments(id),
       ipdService.getReceiptSummary(id),
-      ipdService.getPharmacyTotal(id),
+      ipdService.getPharmacyBills(id),
     ])
       .then(([pRes, bRes, iRes, aRes, rRes, phRes]) => {
         const p = pRes.data.data;
@@ -401,7 +495,7 @@ export default function IpdBilling() {
         setInvestigations(iRes.data.data.investigations || []);
         setBedAllotments(allotments);
         setReceiptSummary(rRes.data.data || null);
-        setPharmTotal(phRes.data.data?.total ?? 0);
+        setPharmBills(phRes.data.data.bills || []);
 
         if (p.bedChargeOverride != null) {
           setOverrideSaved(p.bedChargeOverride);
@@ -467,6 +561,7 @@ export default function IpdBilling() {
   const servicesDiscount = entries.reduce((s, e) => s + (e.discount || 0), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
   const invTotal         = investigations.reduce((s, i) => s + (i.totalAmount || 0), 0);
+  const pharmTotal       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
 
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
   const fallbackRate = patient.bedCategory ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
@@ -556,9 +651,10 @@ export default function IpdBilling() {
     openPrintWindow(
       `${billLabel} — ${patient.admissionId}`,
       buildDetailedBillHtml(
-        billLabel, patient, entries, investigations, bedAllotments, fallbackBed, fallbackEndDate,
+        billLabel, patient, entries, investigations, bedAllotments, pharmBills,
+        fallbackBed, fallbackEndDate,
         effectiveBedTotal, servicesDiscount, servicesNet,
-        invTotal, grandTotal, receiptSummary, logoUrl,
+        invTotal, pharmTotal, grandTotal, receiptSummary, logoUrl,
       ),
     );
 
@@ -569,7 +665,8 @@ export default function IpdBilling() {
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
         effectiveBedTotal,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
-        servicesDiscount, servicesNet, invTotal, grandTotal, receiptSummary, logoUrl,
+        servicesDiscount, servicesNet, invTotal, pharmTotal, grandTotal, receiptSummary, logoUrl,
+        investigations, pharmBills,
       ),
     );
 
@@ -857,26 +954,95 @@ export default function IpdBilling() {
                 <CardTitle className="text-base">Investigations</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="text-left px-4 py-2 font-medium">Req No</th>
-                      <th className="text-left px-4 py-2 font-medium">Date</th>
-                      <th className="text-left px-4 py-2 font-medium">Vendor</th>
-                      <th className="text-right px-4 py-2 font-medium">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {investigations.map(inv => (
-                      <tr key={inv._id} className="border-t">
-                        <td className="px-4 py-2 font-mono text-xs">{inv.reqNo}</td>
-                        <td className="px-4 py-2">{fmtDate(inv.reqDate)}</td>
-                        <td className="px-4 py-2">{inv.vendor || "—"}</td>
-                        <td className="text-right px-4 py-2 font-medium">{fmt(inv.totalAmount || 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {investigations.map(inv => (
+                  <div key={inv._id} className="border-t first:border-t-0">
+                    <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 text-xs text-gray-500">
+                      <span className="font-mono font-semibold text-gray-700">{inv.reqNo}</span>
+                      <span>{fmtDate(inv.reqDate)}</span>
+                      {inv.vendor && <span>{inv.vendor}</span>}
+                      {inv.vendorBillNo && <span>Bill: {inv.vendorBillNo}</span>}
+                      <span className="ml-auto font-semibold text-purple-700">{fmt(inv.totalAmount || 0)}</span>
+                    </div>
+                    {inv.items?.length > 0 && (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400 uppercase border-b">
+                            <th className="px-4 py-1 text-left font-medium">#</th>
+                            <th className="px-4 py-1 text-left font-medium">Description</th>
+                            <th className="px-4 py-1 text-left font-medium">Category</th>
+                            <th className="px-4 py-1 text-right font-medium">Lab Amt</th>
+                            <th className="px-4 py-1 text-right font-medium">Net Amt</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inv.items.map((it, i) => (
+                            <tr key={i} className="border-t border-gray-100">
+                              <td className="px-4 py-1.5 text-gray-400">{it.slNo || i + 1}</td>
+                              <td className="px-4 py-1.5 font-medium">{it.description}</td>
+                              <td className="px-4 py-1.5 text-gray-500">{it.category || "—"}</td>
+                              <td className="px-4 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
+                              <td className="px-4 py-1.5 text-right font-semibold text-purple-700">{fmt(it.netAmount || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ))}
+                <div className="flex justify-between items-center px-4 py-2 border-t bg-gray-50">
+                  <span className="text-sm font-medium text-gray-700">Total Investigation Charge</span>
+                  <span className="font-bold text-purple-700">{fmt(invTotal)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Pharmacy */}
+          {pharmBills.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Pharmacy</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {pharmBills.map(bill => (
+                  <div key={bill._id} className="border-t first:border-t-0">
+                    <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 text-xs text-gray-500">
+                      <span className="font-mono font-semibold text-gray-700">{bill.billNo}</span>
+                      <span>{fmtDate(bill.billDate)}</span>
+                      {bill.vendor && <span>{bill.vendor}</span>}
+                      {bill.referredBy && <span>Ref: {bill.referredBy}</span>}
+                      <span className="ml-auto font-semibold text-green-700">{fmt(bill.netAmount)}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 uppercase border-b">
+                          <th className="px-4 py-1 text-left font-medium">Item</th>
+                          <th className="px-4 py-1 text-left font-medium">Package</th>
+                          <th className="px-4 py-1 text-center font-medium">Qty</th>
+                          <th className="px-4 py-1 text-right font-medium">MRP</th>
+                          <th className="px-4 py-1 text-center font-medium">Dis%</th>
+                          <th className="px-4 py-1 text-right font-medium">Net Amt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bill.items.map((it, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="px-4 py-1.5 font-medium">{it.itemName}</td>
+                            <td className="px-4 py-1.5 text-gray-500">{it.package || "—"}</td>
+                            <td className="px-4 py-1.5 text-center">{it.qty}</td>
+                            <td className="px-4 py-1.5 text-right">{fmt(parseFloat(String(it.mrp)) || 0)}</td>
+                            <td className="px-4 py-1.5 text-center">{it.discount || 0}%</td>
+                            <td className="px-4 py-1.5 text-right font-semibold text-green-700">{fmt(it.netAmount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center px-4 py-2 border-t bg-gray-50">
+                  <span className="text-sm font-medium text-gray-700">Total Pharmacy Charge</span>
+                  <span className="font-bold text-green-700">{fmt(pharmTotal)}</span>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1026,6 +1192,90 @@ export default function IpdBilling() {
               )}
             </CardContent>
           </Card>
+
+          {investigations.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Investigation Items</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <th className="text-left px-3 py-2 font-medium">Req No</th>
+                      <th className="text-left px-3 py-2 font-medium">Date</th>
+                      <th className="text-left px-3 py-2 font-medium">Description</th>
+                      <th className="text-left px-3 py-2 font-medium">Category</th>
+                      <th className="text-right px-3 py-2 font-medium">Lab Amt</th>
+                      <th className="text-right px-3 py-2 font-medium">Net Amt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {investigations.flatMap(inv =>
+                      (inv.items || []).map((it, i) => (
+                        <tr key={`${inv._id}-${i}`} className="border-t">
+                          <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{inv.reqNo}</td>
+                          <td className="px-3 py-1.5 text-xs text-gray-500">{fmtDate(inv.reqDate)}</td>
+                          <td className="px-3 py-1.5">{it.description}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{it.category || "—"}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
+                          <td className="px-3 py-1.5 text-right font-medium text-purple-700">{fmt(it.netAmount || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr className="border-t-2 bg-gray-50 font-semibold">
+                      <td colSpan={5} className="px-3 py-2">Investigations Total</td>
+                      <td className="px-3 py-2 text-right text-purple-700">{fmt(invTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
+          {pharmBills.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Pharmacy Items</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <th className="text-left px-3 py-2 font-medium">Bill No</th>
+                      <th className="text-left px-3 py-2 font-medium">Date</th>
+                      <th className="text-left px-3 py-2 font-medium">Item</th>
+                      <th className="text-left px-3 py-2 font-medium">Package</th>
+                      <th className="text-center px-3 py-2 font-medium">Qty</th>
+                      <th className="text-right px-3 py-2 font-medium">MRP</th>
+                      <th className="text-center px-3 py-2 font-medium">Dis%</th>
+                      <th className="text-right px-3 py-2 font-medium">Net Amt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pharmBills.flatMap(bill =>
+                      bill.items.map((it, i) => (
+                        <tr key={`${bill._id}-${i}`} className="border-t">
+                          <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{bill.billNo}</td>
+                          <td className="px-3 py-1.5 text-xs text-gray-500">{fmtDate(bill.billDate)}</td>
+                          <td className="px-3 py-1.5 font-medium">{it.itemName}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{it.package || "—"}</td>
+                          <td className="px-3 py-1.5 text-center">{it.qty}</td>
+                          <td className="px-3 py-1.5 text-right">{fmt(parseFloat(String(it.mrp)) || 0)}</td>
+                          <td className="px-3 py-1.5 text-center">{it.discount || 0}%</td>
+                          <td className="px-3 py-1.5 text-right font-medium text-green-700">{fmt(it.netAmount)}</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr className="border-t-2 bg-gray-50 font-semibold">
+                      <td colSpan={7} className="px-3 py-2">Pharmacy Total</td>
+                      <td className="px-3 py-2 text-right text-green-700">{fmt(pharmTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

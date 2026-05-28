@@ -10,8 +10,9 @@ const pharmacyItemSchema = new mongoose.Schema({
   unit:        { type: String, default: "" },
   qty:         { type: Number, default: 1 },
   totalAmount: { type: Number, default: 0 },
-  discount:    { type: Number, default: 0 },
-  netAmount:   { type: Number, default: 0 },
+  discount:     { type: Number, default: 0 },
+  discountType: { type: String, default: "%" },
+  netAmount:    { type: Number, default: 0 },
 }, { _id: false });
 
 const ipdPharmacyBillSchema = new mongoose.Schema({

@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BED_CHARGES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS,
@@ -14,6 +15,26 @@ import opdService from "@/services/opdService";
 
 const TITLES  = ["Mr", "Mrs", "Ms", "Dr", "Baby", "Master"];
 const GENDERS = ["Male", "Female", "Other"];
+
+const TPA_LIST = [
+  "HERITAGE HEALTH INSURANCE TPA", "GENINS INSURANCE TPA", "MED-SAVE INSURANCE TPA",
+  "PARAMOUNT INSURANCE TPA", "MD-INDIA INSURANCE TPA", "MEDI - ASSIS INSURANCE TPA",
+  "RAKSHA INSURANCE TPA", "FAMILY HEALTH INSURANCE TPA", "HEALTH INDIA INSURANCE TPA",
+  "PAREKH INSURANCE TPA", "VIDAL INSURANCE TPA", "SAFEWAY INSURANCE TPA",
+  "HEALTH INSURANCE TPA", "ALANKIT INSURANCE TPA", "GOOD HEALTH INSURANCE TPA",
+];
+
+const INSURANCE_LIST = [
+  "ICICI LOMBARD GENERAL INSURANCE", "FUTURE GENERALI INSURANCE", "BAJAJ ALIANZ GENERAL INSURANCE",
+  "IFFCO-TOKIO GENERAL INSURANCE", "HDFC ERGO GENERAL INSURANCE", "CIGNA MANIPAL GENERAL INSURANCE",
+  "UNIVERSAL SAMPO GENERAL INSURANCE", "ROYAL SUNDARAM GENERAL INSURANCE", "TATA AIG GENERAL INSURANCE",
+  "RELIANCE GENERAL INSURANCE", "CHOLA MANDALAM GENERAL INSURANCE", "MAGMA HDI GENERAL INSURANCE",
+  "ACKO GENERAL INSURANCE", "NAVI GENERAL INSURANCE CO.", "GO DIGIT GENERAL INSURANCE CO.",
+  "NATIONAL INSURANCE CO. LTD", "NEW INDIA ASSURANCE CO. LTD", "UNITED INDIA INSURANCE CO. LTD",
+  "ORIENTAL INSURANCE CO. LTD",
+];
+
+const normStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function calcAge(dob: string) {
   if (!dob) return { years: "", months: "", days: "" };
@@ -65,24 +86,36 @@ const EMPTY = {
 type Doctor = { slNo: number; doctorName: string };
 
 export default function IpdNewPatient() {
-  const [form, setForm] = useState({ ...EMPTY });
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [form, setForm]               = useState({ ...EMPTY });
+  const [doctors, setDoctors]         = useState<Doctor[]>([]);
   const [selectedDoc, setSelectedDoc] = useState("");
   const [specFilter, setSpecFilter]   = useState("");
+  const [docOpen, setDocOpen]         = useState(false);
   const [allDoctors, setAllDoctors]   = useState<{ _id: string; name: string; specialization: string }[]>([]);
-  const [nextId, setNextId] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [nextId, setNextId]           = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [occupiedBeds, setOccupiedBeds] = useState<{ bedCategory: string; bedNo: string }[]>([]);
 
-  const availableBeds = BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [];
+  const occupiedNos = new Set(
+    occupiedBeds.filter(b => b.bedCategory === form.bedCategory).map(b => b.bedNo)
+  );
+  const availableBeds = (BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [])
+    .filter(b => !occupiedNos.has(b));
 
   useEffect(() => {
     ipdService.getNextId().then(r => setNextId(r.data.data.admissionId)).catch(() => {});
     opdService.getDoctors().then(r => {
       setAllDoctors(r.data.data.doctors || []);
-    }).catch(() => {});
+    }).catch(err => console.error("Failed to load doctors", err));
+    ipdService.getOccupiedBeds().then(r => setOccupiedBeds(r.data.data.beds || [])).catch(() => {});
   }, []);
 
   const set = (field: string, val: any) => setForm(f => ({ ...f, [field]: val }));
+
+  const docHits = allDoctors.filter(d =>
+    (!specFilter || d.specialization === specFilter) &&
+    (!selectedDoc || normStr(d.name).includes(normStr(selectedDoc)))
+  );
 
   const handleDob = (val: string) => {
     const { years, months, days } = calcAge(val);
@@ -344,9 +377,9 @@ export default function IpdNewPatient() {
       </Card>
 
       {/* Under Doctor */}
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader className="pb-3"><CardTitle className="text-base">Under Doctor</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 overflow-visible">
           <div className="flex gap-2 flex-wrap">
             <Select value={specFilter || "all"} onValueChange={v => { setSpecFilter(v === "all" ? "" : v); setSelectedDoc(""); }}>
               <SelectTrigger className="h-9 text-sm w-52"><SelectValue placeholder="All specializations" /></SelectTrigger>
@@ -357,17 +390,40 @@ export default function IpdNewPatient() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={selectedDoc || "none"} onValueChange={v => setSelectedDoc(v === "none" ? "" : v)}>
-              <SelectTrigger className="h-9 text-sm flex-1 min-w-48"><SelectValue placeholder="Select doctor…" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">-- Select doctor --</SelectItem>
-                {allDoctors
-                  .filter(d => !specFilter || d.specialization === specFilter)
-                  .map(d => (
-                    <SelectItem key={d._id} value={d.name}>{d.name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <div className="relative flex-1 min-w-48">
+              <div className="relative">
+                <Input
+                  value={selectedDoc}
+                  onChange={e => { setSelectedDoc(e.target.value); setDocOpen(true); }}
+                  onFocus={() => setDocOpen(true)}
+                  onBlur={() => setTimeout(() => setDocOpen(false), 150)}
+                  placeholder="Search doctor…"
+                  className="h-9 text-sm pr-8"
+                />
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+              {docOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-52 overflow-y-auto">
+                  {docHits.length === 0
+                    ? <div className="px-3 py-2 text-sm text-muted-foreground">{allDoctors.length === 0 ? "Loading doctors…" : "No doctors found"}</div>
+                    : docHits.map(d => (
+                        <div key={d._id}
+                          onMouseDown={() => {
+                            const name = d.name;
+                            if (!doctors.some(ex => ex.doctorName === name)) {
+                              setDoctors(prev => [...prev, { slNo: prev.length + 1, doctorName: name }]);
+                            }
+                            setSelectedDoc("");
+                            setDocOpen(false);
+                          }}
+                          className="px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground">
+                          {d.name}
+                        </div>
+                      ))
+                  }
+                </div>
+              )}
+            </div>
             <Button type="button" size="sm" className="h-9 bg-red-600 hover:bg-red-700 shrink-0" onClick={addDoctor}>
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -457,14 +513,20 @@ export default function IpdNewPatient() {
                 <SelectContent>{PATIENT_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Insurance Company</Label>
+              <SearchableSelect options={INSURANCE_LIST} value={form.insuranceCo} onChange={v => set("insuranceCo", v)} placeholder="Search insurance..." />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">TPA</Label>
+              <SearchableSelect options={TPA_LIST} value={form.tpa} onChange={v => set("tpa", v)} placeholder="Search TPA..." />
+            </div>
             {[
-              { label: "Insurance Company", field: "insuranceCo"       },
-              { label: "TPA",               field: "tpa"               },
-              { label: "Card No",           field: "cardNo"            },
-              { label: "Policy No",         field: "policyNo"          },
-              { label: "Claim No",          field: "claimNo"           },
-              { label: "Registration No",   field: "ipdRegistrationNo" },
-              { label: "Other Details",     field: "otherDetails"      },
+              { label: "Card No",         field: "cardNo"            },
+              { label: "Policy No",       field: "policyNo"          },
+              { label: "Claim No",        field: "claimNo"           },
+              { label: "Registration No", field: "ipdRegistrationNo" },
+              { label: "Other Details",   field: "otherDetails"      },
             ].map(({ label, field }) => (
               <div key={field} className="space-y-1">
                 <Label className="text-xs">{label}</Label>

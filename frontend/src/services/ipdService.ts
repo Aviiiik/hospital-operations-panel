@@ -9,6 +9,20 @@ export interface InvestigationVendor {
   isActive: boolean;
 }
 
+// ─── Investigation Item (catalogue) types ─────────────────────────────────────
+
+export interface InvestigationItem {
+  _id: string;
+  slNo: number;
+  name: string;
+  category: string;
+  labRate: number;
+  patientRate: number;
+  vendorCode: string;
+  vendorName: string;
+  isActive: boolean;
+}
+
 // ─── Service catalogue types ──────────────────────────────────────────────────
 
 export interface CatalogueService {
@@ -214,6 +228,13 @@ const ipdService = {
   createVendor:  (data: any)   => api.post("/ipd/vendors", data),
   updateVendor:  (id: string, data: any) => api.put(`/ipd/vendors/${id}`, data),
   deleteVendor:  (id: string)  => api.delete(`/ipd/vendors/${id}`),
+
+  // Investigation Items (catalogue)
+  getInvestigationItems:    (vendorCode?: string, all = false) =>
+    api.get("/ipd/investigation-items", { params: { ...(all ? { all: "1" } : {}), ...(vendorCode ? { vendorCode } : {}) } }),
+  createInvestigationItem:  (data: any)   => api.post("/ipd/investigation-items", data),
+  updateInvestigationItem:  (id: string, data: any) => api.put(`/ipd/investigation-items/${id}`, data),
+  deleteInvestigationItem:  (id: string)  => api.delete(`/ipd/investigation-items/${id}`),
 
   // Service Catalogue
   getServiceCatalogue:        (all = false) => api.get("/ipd/service-catalogue", { params: all ? { all: "1" } : {} }),

@@ -16,17 +16,19 @@ import EPrescription     from "./pages/opd/EPrescription";
 import AddDoctor         from "./pages/opd/AddDoctor";
 
 import Accounts         from "./pages/accounts/Accounts";
-import IpdList          from "./pages/ipd/IpdList";
-import IpdNewPatient    from "./pages/ipd/IpdNewPatient";
-import IpdSearchPatient from "./pages/ipd/IpdSearchPatient";
-import IpdEditPatient   from "./pages/ipd/IpdEditPatient";
-import IpdInvestigation from "./pages/ipd/IpdInvestigation";
-import IpdDischarge     from "./pages/ipd/IpdDischarge";
-import IpdBilling       from "./pages/ipd/IpdBilling";
-import IpdServices      from "./pages/ipd/IpdServices";
-import IpdBedAllotment  from "./pages/ipd/IpdBedAllotment";
-import IpdReceipt       from "./pages/ipd/IpdReceipt";
-import IpdPharmacy      from "./pages/ipd/IpdPharmacy";
+import IpdList               from "./pages/ipd/IpdList";
+import IpdNewPatient          from "./pages/ipd/IpdNewPatient";
+import IpdSearchPatient       from "./pages/ipd/IpdSearchPatient";
+import IpdEditPatient         from "./pages/ipd/IpdEditPatient";
+import IpdInvestigation       from "./pages/ipd/IpdInvestigation";
+import IpdDischarge           from "./pages/ipd/IpdDischarge";
+import IpdBilling             from "./pages/ipd/IpdBilling";
+import IpdServices            from "./pages/ipd/IpdServices";
+import IpdBedAllotment        from "./pages/ipd/IpdBedAllotment";
+import IpdReceipt             from "./pages/ipd/IpdReceipt";
+import IpdPharmacy            from "./pages/ipd/IpdPharmacy";
+import InvestigationVendors   from "./pages/ipd/InvestigationVendors";
+import InvestigationItems     from "./pages/ipd/InvestigationItems";
 import Pharmacy         from "./pages/pharmacy/Pharmacy";
 import Operations       from "./pages/operations/Operations";
 
@@ -87,6 +89,8 @@ function App() {
             <Route path="ipd/bed-allotment/:id" element={<RoleRoute allowed={["admin"]}><IpdBedAllotment /></RoleRoute>} />
             <Route path="ipd/receipt/:id"       element={<RoleRoute allowed={["admin"]}><IpdReceipt /></RoleRoute>} />
             <Route path="ipd/pharmacy/:id"      element={<RoleRoute allowed={["admin"]}><IpdPharmacy /></RoleRoute>} />
+            <Route path="ipd/vendors"           element={<RoleRoute allowed={["admin"]}><InvestigationVendors /></RoleRoute>} />
+            <Route path="ipd/investigation-items" element={<RoleRoute allowed={["admin"]}><InvestigationItems /></RoleRoute>} />
 
             {/* Pharmacy */}
             <Route path="pharmacy" element={<RoleRoute allowed={["admin","pharmacist","doctor","nurse"]}><Pharmacy /></RoleRoute>} />
