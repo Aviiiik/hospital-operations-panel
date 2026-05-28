@@ -9,7 +9,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee, BedDouble, Receipt, Pill, ChevronDown } from "lucide-react";
 import ipdService, {
-  BED_CATEGORIES, BLOOD_GROUPS, DIET_TYPES,
+  BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS, DISCHARGE_TYPES,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
@@ -63,13 +63,6 @@ export default function IpdEditPatient() {
   const [allDoctors, setAllDoctors]   = useState<{ _id: string; name: string; specialization: string; department: string }[]>([]);
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
-  const [occupiedBeds, setOccupiedBeds] = useState<{ _id: string; bedCategory: string; bedNo: string }[]>([]);
-
-  const occupiedNos = new Set(
-    occupiedBeds
-      .filter(b => b.bedCategory === form?.bedCategory && b._id !== id)
-      .map(b => b.bedNo)
-  );
 
   useEffect(() => {
     if (!id) return;
@@ -90,8 +83,6 @@ export default function IpdEditPatient() {
     opdService.getDoctors().then(r => {
       setAllDoctors(r.data.data.doctors || []);
     }).catch(err => console.error("Failed to load doctors", err));
-
-    ipdService.getOccupiedBeds().then(r => setOccupiedBeds(r.data.data.beds || [])).catch(() => {});
   }, [id]);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
