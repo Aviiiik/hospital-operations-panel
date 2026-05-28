@@ -10,6 +10,7 @@ const IpdBillingEntrySchema = new mongoose.Schema(
     quantity:         { type: Number, default: 1 },
     unitCharge:       { type: Number, default: 0 },
     discount:         { type: Number, default: 0 },
+    discountType:     { type: String, enum: ["flat", "percent"], default: "flat" },
     totalCharge:      { type: Number, default: 0 },
     date:             { type: Date, default: Date.now },
     doctorName:       { type: String },
