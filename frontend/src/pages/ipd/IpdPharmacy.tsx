@@ -571,7 +571,7 @@ export default function IpdPharmacy() {
                           <th className="px-4 py-1.5 text-left font-medium">Expiry</th>
                           <th className="px-4 py-1.5 text-right font-medium">MRP</th>
                           <th className="px-4 py-1.5 text-center font-medium">Qty</th>
-                          <th className="px-4 py-1.5 text-center font-medium">Dis%</th>
+                          <th className="px-4 py-1.5 text-center font-medium">Discount</th>
                           <th className="px-4 py-1.5 text-right font-medium">Net Amt</th>
                         </tr>
                       </thead>
@@ -584,7 +584,7 @@ export default function IpdPharmacy() {
                             <td className="px-4 py-1.5 text-gray-500">{it.expiryDate || "—"}</td>
                             <td className="px-4 py-1.5 text-right">{fmt(parseFloat(it.mrp))}</td>
                             <td className="px-4 py-1.5 text-center">{it.qty}</td>
-                            <td className="px-4 py-1.5 text-center">{it.discount || 0}%</td>
+                            <td className="px-4 py-1.5 text-center">{it.discount || 0}{(it as any).discountType || "%"}</td>
                             <td className="px-4 py-1.5 text-right font-semibold text-green-700">{fmt(it.netAmount)}</td>
                           </tr>
                         ))}

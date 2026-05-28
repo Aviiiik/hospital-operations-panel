@@ -18,6 +18,7 @@ interface BillingEntry {
   quantity: number;
   unitCharge: number;
   discount: number;
+  discountType: "flat" | "percent";
   totalCharge: number;
   date: string;
   doctorName?: string;
@@ -61,6 +62,7 @@ interface PharmItem {
   qty: string | number;
   mrp: string | number;
   discount: string | number;
+  discountType?: "%" | "₹";
   netAmount: number;
 }
 
@@ -156,25 +158,28 @@ function patientInfoBlock(patient: any) {
 }
 
 function totalsBlock(
-  totalBedCharge: number, servicesNet: number, invTotal: number, pharmTotal: number,
-  servicesDiscount: number, grandTotal: number,
+  totalBedCharge: number, servicesGross: number, invTotal: number, pharmTotal: number,
+  servicesDiscount: number, billDiscAmt: number, grandTotal: number,
   receiptSummary: ReceiptSummary | null,
 ) {
-  const totalPaid = receiptSummary?.totalReceived ?? 0;
-  const totalTds  = receiptSummary?.totalTds ?? 0;
-  const totalDis  = receiptSummary?.totalDisallowed ?? 0;
-  const netDue    = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
+  const totalPaid  = receiptSummary?.totalReceived ?? 0;
+  const totalTds   = receiptSummary?.totalTds ?? 0;
+  const totalDis   = receiptSummary?.totalDisallowed ?? 0;
+  const preDisc    = totalBedCharge + servicesGross + invTotal + pharmTotal - servicesDiscount;
+  const netDue     = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
   return `
 <div class="totals-box">
   <div class="totals-inner">
     <div class="totals-row"><span>Total Bed Charge</span><span class="bold">${fmt(totalBedCharge)}</span></div>
-    <div class="totals-row"><span>Nursing Home Charge</span><span class="bold">${fmt(servicesNet)}</span></div>
+    <div class="totals-row"><span>Nursing Home Charge</span><span class="bold">${fmt(servicesGross)}</span></div>
     ${invTotal > 0 ? `<div class="totals-row"><span>Investigations</span><span class="bold">${fmt(invTotal)}</span></div>` : ""}
     ${pharmTotal > 0 ? `<div class="totals-row"><span>Pharmacy</span><span class="bold">${fmt(pharmTotal)}</span></div>` : ""}
-    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesNet + invTotal + pharmTotal)}</span></div>
-    ${servicesDiscount > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Less Discount</span><span>${fmt(servicesDiscount)}</span></div>` : ""}
+    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + invTotal + pharmTotal)}</span></div>
+    ${servicesDiscount > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Service Discount</span><span>${fmt(servicesDiscount)}</span></div>` : ""}
     <div class="totals-sep"></div>
-    <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(grandTotal)}</span></div>
+    <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(preDisc)}</span></div>
+    ${billDiscAmt > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Bill Discount</span><span>${fmt(billDiscAmt)}</span></div>` : ""}
+    <div class="totals-row"><span>Grand Total</span><span class="bold">${fmt(grandTotal)}</span></div>
     <div class="totals-row"><span>Total Paid Amount</span><span>${fmt(totalPaid)}</span></div>
     ${totalTds > 0 ? `<div class="totals-row"><span>TDS</span><span>${fmt(totalTds)}</span></div>` : ""}
     ${totalDis > 0 ? `<div class="totals-row"><span>Disallowed</span><span>${fmt(totalDis)}</span></div>` : ""}
@@ -198,9 +203,11 @@ function buildDetailedBillHtml(
   estEndDate: Date | null,
   totalBedCharge: number,
   servicesDiscount: number,
+  servicesGross: number,
   servicesNet: number,
   invTotal: number,
   pharmTotal: number,
+  billDiscAmt: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   logo: string,
@@ -227,7 +234,7 @@ function buildDetailedBillHtml(
       <td class="sub">${e.serviceGroup}</td>
       <td class="center">${e.quantity}</td>
       <td class="right">${fmt(e.unitCharge)}</td>
-      <td class="right">${e.discount ? `<span style="color:#ef4444">${fmt(e.discount)}</span>` : "—"}</td>
+      <td class="right">${(e.unitCharge * e.quantity - e.totalCharge) > 0 ? `<span style="color:#ef4444">${fmt(e.unitCharge * e.quantity - e.totalCharge)}</span>` : "—"}</td>
       <td class="right bold">${fmt(e.totalCharge)}</td>
     </tr>`).join("");
 
@@ -251,7 +258,7 @@ function buildDetailedBillHtml(
       <td>${it.package || "—"}</td>
       <td class="center">${it.qty}</td>
       <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-      <td class="center">${it.discount || 0}%</td>
+      <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
       <td class="right bold">${fmt(it.netAmount)}</td>
     </tr>`)
   ).join("");
@@ -314,14 +321,14 @@ ${investigations.length > 0 ? `
 ${pharmBills.length > 0 ? `
 <h2>Pharmacy</h2>
 <table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Dis%</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
   <tbody>
     ${pharmRows}
     <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesNet, invTotal, pharmTotal, servicesDiscount, grandTotal, receiptSummary)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary)}`;
 }
 
 function buildSummaryBillHtml(
@@ -333,9 +340,11 @@ function buildSummaryBillHtml(
   totalBedCharge: number,
   serviceGroups: Record<string, { gross: number; discount: number; net: number }>,
   servicesDiscount: number,
+  servicesGross: number,
   servicesNet: number,
   invTotal: number,
   pharmTotal: number,
+  billDiscAmt: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   logo: string,
@@ -432,7 +441,7 @@ ${invTotal > 0 ? `
 ${pharmTotal > 0 ? `
 <h2>Pharmacy</h2>
 <table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Dis%</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
   <tbody>
     ${pharmBills.flatMap((bill: any) =>
       bill.items.map((it: any) => `
@@ -443,7 +452,7 @@ ${pharmTotal > 0 ? `
         <td>${it.package || "—"}</td>
         <td class="center">${it.qty}</td>
         <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-        <td class="center">${it.discount || 0}%</td>
+        <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
         <td class="right bold">${fmt(it.netAmount)}</td>
       </tr>`)
     ).join("")}
@@ -451,7 +460,7 @@ ${pharmTotal > 0 ? `
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesNet, invTotal, pharmTotal, servicesDiscount, grandTotal, receiptSummary)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary)}`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -469,6 +478,10 @@ export default function IpdBilling() {
   const [overrideInput,  setOverrideInput]  = useState("");
   const [overrideSaved,  setOverrideSaved]  = useState<number | null>(null);
   const [savingOverride, setSavingOverride] = useState(false);
+  const [billDiscInput,    setBillDiscInput]    = useState("");
+  const [billDiscType,     setBillDiscType]     = useState<"flat" | "percent">("flat");
+  const [billDiscSaved,    setBillDiscSaved]    = useState<number | null>(null);
+  const [savingBillDisc,   setSavingBillDisc]   = useState(false);
   const [estDate,    setEstDate]    = useState(() => { const n = new Date(); return new Date(n.getTime() + 330 * 60000).toISOString().slice(0, 10); });
   const [estTime,    setEstTime]    = useState(() => {
     const n = new Date();
@@ -519,6 +532,12 @@ export default function IpdBilling() {
           setOverrideInput(String(computed));
         }
 
+        if (p.billDiscount != null) {
+          setBillDiscSaved(p.billDiscount);
+          setBillDiscInput(String(p.billDiscount));
+          setBillDiscType(p.billDiscountType === "percent" ? "percent" : "flat");
+        }
+
         if (p.estimateEndDate) {
           const d = new Date(p.estimateEndDate);
           const ist = new Date(d.getTime() + 330 * 60000); // UTC → IST
@@ -552,13 +571,15 @@ export default function IpdBilling() {
     const key = e.serviceGroup || "Other";
     if (!acc[key]) acc[key] = { entries: [], gross: 0, discount: 0, net: 0 };
     acc[key].entries.push(e);
-    acc[key].gross    += e.unitCharge * e.quantity;
-    acc[key].discount += e.discount   || 0;
+    const gross = e.unitCharge * e.quantity;
+    acc[key].gross    += gross;
+    acc[key].discount += gross - e.totalCharge;
     acc[key].net      += e.totalCharge;
     return acc;
   }, {});
 
-  const servicesDiscount = entries.reduce((s, e) => s + (e.discount || 0), 0);
+  const servicesGross    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const servicesDiscount = entries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
   const invTotal         = investigations.reduce((s, i) => s + (i.totalAmount || 0), 0);
   const pharmTotal       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
@@ -586,12 +607,16 @@ export default function IpdBilling() {
 
   const effectiveBedTotal = overrideSaved !== null ? overrideSaved : totalBedCharge;
 
-  const totalCharge  = effectiveBedTotal + servicesNet + invTotal + pharmTotal;
-  const grandTotal   = totalCharge - servicesDiscount;
-  const totalPaid    = receiptSummary?.totalReceived    ?? 0;
-  const totalTds     = receiptSummary?.totalTds         ?? 0;
-  const totalDis     = receiptSummary?.totalDisallowed  ?? 0;
-  const netDue       = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
+  const totalCharge    = effectiveBedTotal + servicesGross + invTotal + pharmTotal;
+  const preDiscTotal   = totalCharge - servicesDiscount;
+  const billDiscAmt    = billDiscSaved != null
+    ? (billDiscType === "percent" ? preDiscTotal * billDiscSaved / 100 : billDiscSaved)
+    : 0;
+  const grandTotal     = preDiscTotal - billDiscAmt;
+  const totalPaid      = receiptSummary?.totalReceived    ?? 0;
+  const totalTds       = receiptSummary?.totalTds         ?? 0;
+  const totalDis       = receiptSummary?.totalDisallowed  ?? 0;
+  const netDue         = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
 
   const isEstimate   = patient.status !== "Discharged";
   const billLabel    = isEstimate ? "ESTIMATED BILL" : "FINAL BILL";
@@ -618,6 +643,31 @@ export default function IpdBilling() {
       toast.success("Reverted to computed bed charge");
     } catch { toast.error("Failed to clear"); }
     finally { setSavingOverride(false); }
+  };
+
+  const handleSaveBillDisc = async () => {
+    const val = Number(billDiscInput);
+    if (isNaN(val) || val < 0) return toast.error("Enter a valid discount");
+    if (billDiscType === "percent" && val > 100) return toast.error("Percentage cannot exceed 100");
+    setSavingBillDisc(true);
+    try {
+      await ipdService.updatePatient(id!, { billDiscount: val, billDiscountType: billDiscType });
+      setBillDiscSaved(val);
+      toast.success("Bill discount saved");
+    } catch { toast.error("Failed to save"); }
+    finally { setSavingBillDisc(false); }
+  };
+
+  const handleClearBillDisc = async () => {
+    setSavingBillDisc(true);
+    try {
+      await ipdService.updatePatient(id!, { billDiscount: null });
+      setBillDiscSaved(null);
+      setBillDiscInput("");
+      setBillDiscType("flat");
+      toast.success("Discount removed");
+    } catch { toast.error("Failed to clear"); }
+    finally { setSavingBillDisc(false); }
   };
 
   const handleSetEstimate = async () => {
@@ -653,8 +703,8 @@ export default function IpdBilling() {
       buildDetailedBillHtml(
         billLabel, patient, entries, investigations, bedAllotments, pharmBills,
         fallbackBed, fallbackEndDate,
-        effectiveBedTotal, servicesDiscount, servicesNet,
-        invTotal, pharmTotal, grandTotal, receiptSummary, logoUrl,
+        effectiveBedTotal, servicesDiscount, servicesGross, servicesNet,
+        invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
       ),
     );
 
@@ -665,7 +715,7 @@ export default function IpdBilling() {
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
         effectiveBedTotal,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
-        servicesDiscount, servicesNet, invTotal, pharmTotal, grandTotal, receiptSummary, logoUrl,
+        servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         investigations, pharmBills,
       ),
     );
@@ -1020,7 +1070,7 @@ export default function IpdBilling() {
                           <th className="px-4 py-1 text-left font-medium">Package</th>
                           <th className="px-4 py-1 text-center font-medium">Qty</th>
                           <th className="px-4 py-1 text-right font-medium">MRP</th>
-                          <th className="px-4 py-1 text-center font-medium">Dis%</th>
+                          <th className="px-4 py-1 text-center font-medium">Discount</th>
                           <th className="px-4 py-1 text-right font-medium">Net Amt</th>
                         </tr>
                       </thead>
@@ -1031,7 +1081,7 @@ export default function IpdBilling() {
                             <td className="px-4 py-1.5 text-gray-500">{it.package || "—"}</td>
                             <td className="px-4 py-1.5 text-center">{it.qty}</td>
                             <td className="px-4 py-1.5 text-right">{fmt(parseFloat(String(it.mrp)) || 0)}</td>
-                            <td className="px-4 py-1.5 text-center">{it.discount || 0}%</td>
+                            <td className="px-4 py-1.5 text-center">{it.discount || 0}{it.discountType || "%"}</td>
                             <td className="px-4 py-1.5 text-right font-semibold text-green-700">{fmt(it.netAmount)}</td>
                           </tr>
                         ))}
@@ -1061,7 +1111,7 @@ export default function IpdBilling() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Nursing Home Charge</span>
-                    <span className="font-medium">{fmt(servicesNet)}</span>
+                    <span className="font-medium">{fmt(servicesGross)}</span>
                   </div>
                   {invTotal > 0 && (
                     <div className="flex justify-between">
@@ -1095,8 +1145,58 @@ export default function IpdBilling() {
                   )}
                   <div className="flex justify-between border-t pt-1.5">
                     <span className="text-gray-700 font-medium">Net Total</span>
-                    <span className="font-bold">{fmt(grandTotal)}</span>
+                    <span className="font-bold">{fmt(preDiscTotal)}</span>
                   </div>
+
+                  {/* Bill-level discount */}
+                  <div className="border rounded-md bg-gray-50 px-3 py-2 space-y-2 mt-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-gray-600">Bill Discount</span>
+                      {billDiscSaved != null && (
+                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                          {billDiscType === "percent" ? `${billDiscSaved}%` : fmt(billDiscSaved)} saved
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex rounded-md border overflow-hidden shrink-0">
+                        <button type="button"
+                          onClick={() => setBillDiscType("flat")}
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${billDiscType === "flat" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                          ₹
+                        </button>
+                        <button type="button"
+                          onClick={() => setBillDiscType("percent")}
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${billDiscType === "percent" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                          %
+                        </button>
+                      </div>
+                      <Input
+                        type="number" min={0} max={billDiscType === "percent" ? 100 : undefined}
+                        value={billDiscInput}
+                        onChange={e => setBillDiscInput(e.target.value)}
+                        placeholder="0"
+                        className="h-7 text-xs w-24 text-right"
+                      />
+                      <Button size="sm" className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
+                        onClick={handleSaveBillDisc} disabled={savingBillDisc}>
+                        {savingBillDisc ? "…" : "Save"}
+                      </Button>
+                      {billDiscSaved != null && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-gray-500"
+                          onClick={handleClearBillDisc} disabled={savingBillDisc}>
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                    {billDiscSaved != null && (
+                      <div className="flex justify-between text-xs text-red-600 font-medium pt-0.5">
+                        <span>(-)Discount Applied</span>
+                        <span>{fmt(billDiscAmt)}</span>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex justify-between">
                     <span className="text-gray-600">Actual Bill Amount</span>
                     <span className="font-medium">{fmt(grandTotal)}</span>
@@ -1176,7 +1276,7 @@ export default function IpdBilling() {
                         <td className="px-3 py-1.5 text-right">{fmt(e.unitCharge)}</td>
                         <td className="px-3 py-1.5 text-center">{e.quantity}</td>
                         <td className="px-3 py-1.5 text-right font-medium">{fmt(e.totalCharge)}</td>
-                        <td className="px-3 py-1.5 text-right text-red-500">{e.discount ? fmt(e.discount) : "—"}</td>
+                        <td className="px-3 py-1.5 text-right text-red-500">{(e.unitCharge * e.quantity - e.totalCharge) > 0 ? fmt(e.unitCharge * e.quantity - e.totalCharge) : "—"}</td>
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{e.doctorName || ""}</td>
                       </tr>
                     ))}
@@ -1248,7 +1348,7 @@ export default function IpdBilling() {
                       <th className="text-left px-3 py-2 font-medium">Package</th>
                       <th className="text-center px-3 py-2 font-medium">Qty</th>
                       <th className="text-right px-3 py-2 font-medium">MRP</th>
-                      <th className="text-center px-3 py-2 font-medium">Dis%</th>
+                      <th className="text-center px-3 py-2 font-medium">Discount</th>
                       <th className="text-right px-3 py-2 font-medium">Net Amt</th>
                     </tr>
                   </thead>

@@ -79,6 +79,10 @@ const ipdPatientSchema = new mongoose.Schema({
   // Saved bed charge override (manual lock-in from billing page)
   bedChargeOverride: { type: Number, default: null },
 
+  // Bill-level discount (applied to grand total on billing page)
+  billDiscount:     { type: Number, default: null },
+  billDiscountType: { type: String, enum: ["flat", "percent"], default: "flat" },
+
   // Manual estimate end date for open allotments (synced across all pages)
   estimateEndDate: { type: Date, default: null },
   estimateEndTime: { type: String, default: null },

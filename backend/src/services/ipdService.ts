@@ -222,10 +222,13 @@ export async function getBillingEntries(patientId: string) {
 }
 
 export async function createBillingEntry(patientId: string, data: any) {
-  const qty         = Number(data.quantity)   || 1;
-  const unitCharge  = Number(data.unitCharge) || 0;
-  const discount    = Number(data.discount)   || 0;
-  const totalCharge = qty * unitCharge - discount;
+  const qty          = Number(data.quantity)   || 1;
+  const unitCharge   = Number(data.unitCharge) || 0;
+  const discount     = Number(data.discount)   || 0;
+  const discountType = data.discountType === "percent" ? "percent" : "flat";
+  const grossAmount  = qty * unitCharge;
+  const discountAmt  = discountType === "percent" ? grossAmount * discount / 100 : discount;
+  const totalCharge  = grossAmount - discountAmt;
 
   const entry = new IpdBillingEntry({
     ...data,
@@ -233,6 +236,7 @@ export async function createBillingEntry(patientId: string, data: any) {
     quantity:    qty,
     unitCharge,
     discount,
+    discountType,
     totalCharge,
     date: data.date ? new Date(data.date) : istNow(),
   });
@@ -245,14 +249,20 @@ export async function updateBillingEntry(id: string, data: any) {
   if (!existing) return null;
 
   const updateData: any = { ...data };
-  const qty        = data.quantity   !== undefined ? Number(data.quantity)   : existing.quantity;
-  const unitCharge = data.unitCharge !== undefined ? Number(data.unitCharge) : existing.unitCharge;
-  const discount   = data.discount   !== undefined ? Number(data.discount)   : existing.discount;
+  const qty          = data.quantity   !== undefined ? Number(data.quantity)   : existing.quantity;
+  const unitCharge   = data.unitCharge !== undefined ? Number(data.unitCharge) : existing.unitCharge;
+  const discount     = data.discount   !== undefined ? Number(data.discount)   : existing.discount;
+  const discountType = data.discountType !== undefined
+    ? (data.discountType === "percent" ? "percent" : "flat")
+    : (existing.discountType || "flat");
+  const grossAmount  = qty * unitCharge;
+  const discountAmt  = discountType === "percent" ? grossAmount * discount / 100 : discount;
 
-  updateData.quantity    = qty;
-  updateData.unitCharge  = unitCharge;
-  updateData.discount    = discount;
-  updateData.totalCharge = qty * unitCharge - discount;
+  updateData.quantity     = qty;
+  updateData.unitCharge   = unitCharge;
+  updateData.discount     = discount;
+  updateData.discountType = discountType;
+  updateData.totalCharge  = grossAmount - discountAmt;
 
   return IpdBillingEntry.findByIdAndUpdate(id, { $set: updateData }, { new: true }).lean();
 }
@@ -600,12 +610,13 @@ export async function createPharmacyBill(patientId: string, data: any) {
   if (!patient) throw new Error("Patient not found");
   const billNo = await generatePharmacyBillNo();
   const items = (data.items || []).map((it: any) => {
-    const qty   = Number(it.qty)   || 0;
-    const mrp   = Number(it.mrp)   || 0;
-    const disc  = Number(it.discount) || 0;
-    const total = qty * mrp;
-    const net   = total - (total * disc / 100);
-    return { ...it, qty, mrp, discount: disc, totalAmount: total, netAmount: net };
+    const qty      = Number(it.qty)      || 0;
+    const mrp      = Number(it.mrp)      || 0;
+    const disc     = Number(it.discount) || 0;
+    const discType = it.discountType === "₹" ? "₹" : "%";
+    const total    = qty * mrp;
+    const net      = discType === "₹" ? Math.max(0, total - disc) : total - (total * disc / 100);
+    return { ...it, qty, mrp, discount: disc, discountType: discType, totalAmount: total, netAmount: Math.max(0, net) };
   });
   const totalAmount = items.reduce((s: number, i: any) => s + i.totalAmount, 0);
   const netAmount   = items.reduce((s: number, i: any) => s + i.netAmount,   0);
@@ -634,10 +645,11 @@ export async function updatePharmacyBill(id: string, data: any) {
     update.items = update.items.map((it: any) => {
       const qty   = Number(it.qty)   || 0;
       const mrp   = Number(it.mrp)   || 0;
-      const disc  = Number(it.discount) || 0;
-      const total = qty * mrp;
-      const net   = total - (total * disc / 100);
-      return { ...it, qty, mrp, discount: disc, totalAmount: total, netAmount: net };
+      const disc     = Number(it.discount) || 0;
+      const discType = it.discountType === "₹" ? "₹" : "%";
+      const total    = qty * mrp;
+      const net      = discType === "₹" ? Math.max(0, total - disc) : total - (total * disc / 100);
+      return { ...it, qty, mrp, discount: disc, discountType: discType, totalAmount: total, netAmount: Math.max(0, net) };
     });
     update.totalAmount = update.items.reduce((s: number, i: any) => s + i.totalAmount, 0);
     update.netAmount   = update.items.reduce((s: number, i: any) => s + i.netAmount,   0);

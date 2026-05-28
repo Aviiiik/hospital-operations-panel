@@ -25,6 +25,7 @@ interface BillingEntry {
   quantity: number;
   unitCharge: number;
   discount: number;
+  discountType: "flat" | "percent";
   totalCharge: number;
   date: string;
   doctorName?: string;
@@ -65,12 +66,14 @@ function fmtRs(n: number) { return "₹" + Number(n || 0).toLocaleString("en-IN"
 const BLANK: {
   date: string; groupCode: string; serviceName: string;
   unitCharge: string; quantity: string; discount: string;
+  discountType: "flat" | "percent";
   doctorName: string; notes: string;
   fromDate: string; fromTime: string;
   toDate: string; toTime: string;
 } = {
   date: todayStr(), groupCode: "", serviceName: "",
   unitCharge: "", quantity: "", discount: "",
+  discountType: "flat",
   doctorName: "", notes: "",
   fromDate: "", fromTime: "",
   toDate: "", toTime: "",
@@ -118,7 +121,10 @@ export default function IpdServices() {
     ? computeBillingDays(new Date(patient.admissionDate)) : 1;
 
   const amount    = (Number(form.unitCharge) || 0) * (Number(form.quantity) || 0);
-  const netAmount = amount - (Number(form.discount) || 0);
+  const discountAmt = form.discountType === "percent"
+    ? amount * (Number(form.discount) || 0) / 100
+    : (Number(form.discount) || 0);
+  const netAmount = amount - discountAmt;
 
   const loadCatalogue = async () => {
     try {
@@ -206,9 +212,10 @@ export default function IpdServices() {
     setForm({
       date: entry.date?.slice(0, 10) || todayStr(), groupCode: grp?.code ?? "",
       serviceName: entry.serviceName,
-      unitCharge: entry.unitCharge > 0 ? String(entry.unitCharge) : "",
-      quantity:   entry.quantity   > 0 ? String(entry.quantity)   : "",
-      discount:   entry.discount   > 0 ? String(entry.discount)   : "",
+      unitCharge:   entry.unitCharge > 0 ? String(entry.unitCharge) : "",
+      quantity:     entry.quantity   > 0 ? String(entry.quantity)   : "",
+      discount:     entry.discount   > 0 ? String(entry.discount)   : "",
+      discountType: entry.discountType || "flat",
       doctorName: entry.doctorName || "", notes: entry.notes || "",
       fromDate: "", fromTime: "", toDate: "", toTime: "",
     });
@@ -227,9 +234,10 @@ export default function IpdServices() {
       const payload = {
         serviceGroup: grp.name, serviceGroupCode: grp.code, serviceName: finalServiceName,
         unit: activeService?.unit ?? "",
-        quantity:   Number(form.quantity)   || 1,
-        unitCharge: Number(form.unitCharge) || 0,
-        discount:   Number(form.discount)   || 0,
+        quantity:     Number(form.quantity)   || 1,
+        unitCharge:   Number(form.unitCharge) || 0,
+        discount:     Number(form.discount)   || 0,
+        discountType: form.discountType,
         date: form.date,
         doctorName: form.doctorName.trim() || undefined,
         notes: form.notes.trim() || undefined,
@@ -432,8 +440,24 @@ export default function IpdServices() {
               <Input readOnly value={amount || ""} className="h-8 text-xs bg-gray-50 font-medium" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-gray-500">Discount (₹)</Label>
-              <Input type="number" min={0} value={form.discount} onChange={e => setF("discount", e.target.value)} className="h-8 text-xs" placeholder="0" />
+              <Label className="text-xs text-gray-500">Discount</Label>
+              <div className="flex gap-1">
+                <div className="flex rounded-md border overflow-hidden shrink-0">
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, discountType: "flat" }))}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${form.discountType === "flat" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                    ₹
+                  </button>
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, discountType: "percent" }))}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${form.discountType === "percent" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                    %
+                  </button>
+                </div>
+                <Input type="number" min={0} max={form.discountType === "percent" ? 100 : undefined}
+                  value={form.discount} onChange={e => setF("discount", e.target.value)}
+                  className="h-8 text-xs" placeholder="0" />
+              </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-gray-500">Net Amount (₹)</Label>
@@ -545,7 +569,13 @@ export default function IpdServices() {
                         <td className="px-3 py-2 text-right text-gray-700">{fmtRs(entry.unitCharge * entry.quantity)}</td>
                         <td className="px-3 py-2 text-right font-semibold text-gray-900">
                           {fmtRs(entry.totalCharge)}
-                          {entry.discount > 0 && <div className="text-[10px] text-orange-500 font-normal">-{fmtRs(entry.discount)}</div>}
+                          {entry.discount > 0 && (
+                            <div className="text-[10px] text-orange-500 font-normal">
+                              {entry.discountType === "percent"
+                                ? `-${entry.discount}%`
+                                : `-${fmtRs(entry.discount)}`}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-gray-500 text-[10px] max-w-30">
                           {entry.doctorName && <div className="font-medium text-gray-700 truncate">{entry.doctorName}</div>}

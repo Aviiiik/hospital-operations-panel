@@ -695,7 +695,7 @@ export default function IpdInvestigation() {
                     <th className="px-2 py-2 text-center font-medium w-8">#</th>
                     <th className="px-2 py-2 text-left font-medium w-16">Code</th>
                     <th className="px-2 py-2 text-left font-medium min-w-52">Description</th>
-                    <th className="px-2 py-2 text-right font-medium w-24">Amount (₹)</th>
+                    <th className="px-2 py-2 text-right font-medium w-24">Lab Amount (₹)</th>
                     <th className="px-2 py-2 text-left font-medium w-30">Report Date</th>
                     <th className="px-2 py-2 text-left font-medium w-24">Remark</th>
                     <th className="px-2 py-2 text-left font-medium w-28">Category</th>
