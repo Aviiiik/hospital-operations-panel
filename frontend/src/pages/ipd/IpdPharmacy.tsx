@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService from "@/services/ipdService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function MedicineSelect({
       <button
         ref={btnRef}
         type="button"
-        className="h-8 w-full min-w-40 border rounded text-xs px-2 text-left bg-white flex items-center justify-between gap-1 hover:border-gray-400"
+        className="h-9 w-full border rounded text-sm px-2 text-left bg-white flex items-center justify-between gap-1 hover:border-gray-400"
         onClick={handleToggle}
       >
         <span className={value ? "text-gray-900 truncate" : "text-gray-400"}>
@@ -176,6 +177,7 @@ function MedicineSelect({
 export default function IpdPharmacy() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,   setPatient]   = useState<any>(null);
   const [bills,     setBills]     = useState<PharmBill[]>([]);
@@ -267,6 +269,13 @@ export default function IpdPharmacy() {
 
   const handleSave = async () => {
     if (items.some(it => !it.itemName.trim())) return toast.error("All items need a medicine name");
+    if (!(await confirm({
+      title: editBillId ? "Update pharmacy bill?" : "Save pharmacy bill?",
+      description: editBillId
+        ? "This will update the existing pharmacy bill."
+        : "This will save a new pharmacy bill for this patient.",
+      confirmText: editBillId ? "Yes, update" : "Yes, save",
+    }))) return;
     setSaving(true);
     try {
       const payload = { billDate, referredBy, vendor, vendorBillNo, items };
@@ -290,7 +299,12 @@ export default function IpdPharmacy() {
   };
 
   const handleDelete = async (billId: string) => {
-    if (!confirm("Delete this pharmacy bill?")) return;
+    if (!(await confirm({
+      title: "Delete pharmacy bill?",
+      description: "This pharmacy bill will be permanently deleted.",
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deletePharmacyBill(billId);
       setBills(prev => prev.filter(b => b._id !== billId));
@@ -405,93 +419,98 @@ export default function IpdPharmacy() {
               </div>
             </div>
 
-            {/* Items table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 text-gray-600 uppercase">
-                    <th className="px-2 py-1.5 text-left font-medium min-w-[160px]">Item Name</th>
-                    <th className="px-2 py-1.5 text-left font-medium w-28">Package</th>
-                    <th className="px-2 py-1.5 text-left font-medium w-24">Batch No</th>
-                    <th className="px-2 py-1.5 text-left font-medium w-28">Expiry Date</th>
-                    <th className="px-2 py-1.5 text-right font-medium w-32">MRP (₹)</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-24">P.Qty</th>
-                    <th className="px-2 py-1.5 text-left font-medium w-20">Unit</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-24">Qty</th>
-                    <th className="px-2 py-1.5 text-right font-medium w-20">Total</th>
-                    <th className="px-2 py-1.5 text-center font-medium w-28">Discount</th>
-                    <th className="px-2 py-1.5 text-right font-medium w-24">Net Total</th>
-                    <th className="px-2 py-1.5 w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="px-2 py-1">
-                        <MedicineSelect
-                          value={it.itemName}
-                          onSelect={med => handleMedicineSelect(idx, med)}
-                          medicines={medicines}
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <select
-                          value={it.package}
-                          onChange={e => setItem(idx, "package", e.target.value)}
-                          className="h-8 w-full border rounded text-xs px-1"
-                        >
-                          <option value="">—</option>
-                          {PACKAGES.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input value={it.batchNo} onChange={e => setItem(idx, "batchNo", e.target.value)} className="h-8 text-xs" placeholder="Batch" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input type="month" value={it.expiryDate} onChange={e => setItem(idx, "expiryDate", e.target.value)} className="h-8 text-xs" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input type="number" value={it.mrp} onChange={e => setItem(idx, "mrp", e.target.value)} className="h-8 text-xs text-right w-full min-w-[80px]" placeholder="0.00" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input type="number" value={it.pQty} onChange={e => setItem(idx, "pQty", e.target.value)} className="h-8 text-xs text-center" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input value={it.unit} onChange={e => setItem(idx, "unit", e.target.value)} className="h-8 text-xs" placeholder="mg/ml" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <Input type="number" value={it.qty} onChange={e => setItem(idx, "qty", e.target.value)} className="h-8 text-xs text-center" />
-                      </td>
-                      <td className="px-2 py-1 text-right font-medium text-gray-700">
-                        {fmt(it.totalAmount)}
-                      </td>
-                      <td className="px-2 py-1">
-                        <div className="flex items-center gap-1">
-                          <Input type="number" value={it.discount} onChange={e => setItem(idx, "discount", e.target.value)} className="h-8 text-xs text-center w-16" placeholder="0" />
-                          <button
-                            type="button"
-                            onClick={() => setItem(idx, "discountType", it.discountType === "%" ? "₹" : "%")}
-                            className="h-8 w-8 shrink-0 rounded border border-gray-300 text-xs font-semibold hover:bg-gray-100 bg-white"
-                          >
-                            {it.discountType}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold text-green-700">
-                        {fmt(it.netAmount)}
-                      </td>
-                      <td className="px-2 py-1">
-                        {items.length > 1 && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600"
-                            onClick={() => removeItem(idx)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Items */}
+            <div className="space-y-3">
+              <span className="text-sm font-medium text-gray-700">Items</span>
+              {items.map((it, idx) => (
+                <div key={idx} className="border rounded-lg p-4 space-y-3 bg-gray-50/50">
+                  {/* Row 1: Item name + Package + Unit + delete */}
+                  <div className="grid grid-cols-12 gap-3 items-end">
+                    <div className="col-span-5 space-y-1">
+                      <Label className="text-xs">Item Name <span className="text-red-500">*</span></Label>
+                      <MedicineSelect
+                        value={it.itemName}
+                        onSelect={med => handleMedicineSelect(idx, med)}
+                        medicines={medicines}
+                      />
+                    </div>
+                    <div className="col-span-4 space-y-1">
+                      <Label className="text-xs">Package</Label>
+                      <select
+                        value={it.package}
+                        onChange={e => setItem(idx, "package", e.target.value)}
+                        className="h-9 w-full border rounded text-sm px-2 bg-white"
+                      >
+                        <option value="">—</option>
+                        {PACKAGES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Unit</Label>
+                      <Input value={it.unit} onChange={e => setItem(idx, "unit", e.target.value)} className="h-9 text-sm" placeholder="mg/ml" />
+                    </div>
+                    <div className="col-span-1 flex justify-end pb-0.5">
+                      {items.length > 1 && (
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => removeItem(idx)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 2: MRP, P.Qty, Qty, Batch, Expiry */}
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">MRP (₹)</Label>
+                      <Input type="number" value={it.mrp} onChange={e => setItem(idx, "mrp", e.target.value)} className="h-9 text-sm text-right" placeholder="0.00" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Packing Qty</Label>
+                      <Input type="number" value={it.pQty} onChange={e => setItem(idx, "pQty", e.target.value)} className="h-9 text-sm text-center" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Qty</Label>
+                      <Input type="number" value={it.qty} onChange={e => setItem(idx, "qty", e.target.value)} className="h-9 text-sm text-center" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Batch No</Label>
+                      <Input value={it.batchNo} onChange={e => setItem(idx, "batchNo", e.target.value)} className="h-9 text-sm" placeholder="Batch" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Expiry Date</Label>
+                      <Input type="month" value={it.expiryDate} onChange={e => setItem(idx, "expiryDate", e.target.value)} className="h-9 text-sm" />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Totals */}
+                  <div className="flex items-center justify-end gap-6 pt-2 border-t border-gray-200">
+                    <div className="text-sm text-gray-500">
+                      Total: <span className="font-semibold text-gray-700">{fmt(it.totalAmount)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-gray-500 shrink-0">Discount</Label>
+                      <Input
+                        type="number"
+                        value={it.discount}
+                        onChange={e => setItem(idx, "discount", e.target.value)}
+                        className="h-8 text-sm text-center w-20"
+                        placeholder="0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setItem(idx, "discountType", it.discountType === "%" ? "₹" : "%")}
+                        className="h-8 w-10 shrink-0 rounded border border-gray-300 text-sm font-semibold hover:bg-gray-100 bg-white"
+                      >
+                        {it.discountType}
+                      </button>
+                    </div>
+                    <div className="text-sm font-medium">
+                      Net: <span className="font-bold text-green-700 text-base">{fmt(it.netAmount)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Add Item + Totals row */}
@@ -687,6 +706,8 @@ export default function IpdPharmacy() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee, BedDouble, Receipt, Pill, ChevronDown } from "lucide-react";
 import ipdService, {
   BLOOD_GROUPS, DIET_TYPES,
@@ -54,6 +55,7 @@ type Doctor = { slNo: number; doctorName: string };
 export default function IpdEditPatient() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [form, setForm]               = useState<any>(null);
   const [doctors, setDoctors]         = useState<Doctor[]>([]);
@@ -119,6 +121,7 @@ export default function IpdEditPatient() {
     if (!form.name?.trim())  return toast.error("Patient name is required");
     if (!form.gender)        return toast.error("Gender is required");
     if (!form.phone?.trim()) return toast.error("Phone number is required");
+    if (!(await confirm({ title: "Save changes?", description: "This will update this patient's details." }))) return;
 
     setSaving(true);
     try {
@@ -590,6 +593,8 @@ export default function IpdEditPatient() {
           {saving ? "Saving…" : "Save Changes"}
         </Button>
       </div>
+
+      <ConfirmDialog />
     </div>
   );
 }

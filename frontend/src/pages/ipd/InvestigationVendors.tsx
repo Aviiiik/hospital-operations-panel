@@ -8,9 +8,11 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationVendor } from "@/services/ipdService";
 
 export default function InvestigationVendors() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [vendors,  setVendors]  = useState<InvestigationVendor[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState("");
@@ -57,6 +59,13 @@ export default function InvestigationVendors() {
   async function handleSave() {
     if (!formCode.trim() || !formName.trim())
       return toast.error("Code and name are required");
+    if (!(await confirm({
+      title: editTarget ? "Update vendor?" : "Add vendor?",
+      description: editTarget
+        ? "This will update the vendor details."
+        : "This will add a new vendor.",
+      confirmText: editTarget ? "Yes, update" : "Yes, add",
+    }))) return;
     setSaving(true);
     try {
       if (editTarget) {
@@ -84,7 +93,12 @@ export default function InvestigationVendors() {
   }
 
   async function handleDelete(v: InvestigationVendor) {
-    if (!confirm(`Delete vendor "${v.name}"?`)) return;
+    if (!(await confirm({
+      title: "Delete vendor?",
+      description: `Vendor "${v.name}" will be permanently deleted.`,
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteVendor(v._id);
       toast.success("Deleted");
@@ -217,6 +231,8 @@ export default function InvestigationVendors() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog />
     </div>
   );
 }

@@ -14,7 +14,8 @@
       "Bash(Remove-Item -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\\\\pages\\\\doctors\" -Force)",
       "Bash(Get-ChildItem -Path \"d:\\\\hospital-operations-panel\\\\frontend\\\\src\" -Recurse -Filter \"*.tsx\" -o File)",
       "Bash(Select-Object FullName)",
-      "Bash(node -e \"const r = require\\('pdf-parse'\\); console.log\\(typeof r\\); console.log\\(Object.keys\\(r\\)\\);\")"
+      "Bash(node -e \"const r = require\\('pdf-parse'\\); console.log\\(typeof r\\); console.log\\(Object.keys\\(r\\)\\);\")",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

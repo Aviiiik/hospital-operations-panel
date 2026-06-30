@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, BedDouble, Trash2, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { BED_CATEGORIES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
@@ -57,6 +58,7 @@ const BLANK_FORM = {
 export default function IpdBedAllotment() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,    setPatient]    = useState<any>(null);
   const [allotments, setAllotments] = useState<Allotment[]>([]);
@@ -108,6 +110,7 @@ export default function IpdBedAllotment() {
     if (!form.bedCategory) return toast.error("Select a bed category");
     if (!form.bedNo)        return toast.error("Select a bed number");
     if (!form.allotmentDate) return toast.error("Allotment date is required");
+    if (!(await confirm({ title: "Save bed allotment?", description: "This will allot the bed and update the patient's current bed.", confirmText: "Yes, save" }))) return;
     setSaving(true);
     try {
       await ipdService.createBedAllotment(id!, form);
@@ -128,7 +131,12 @@ export default function IpdBedAllotment() {
   };
 
   const handleDelete = async (allotmentId: string) => {
-    if (!confirm("Delete this allotment entry?")) return;
+    if (!(await confirm({
+      title: "Delete allotment entry?",
+      description: "This bed allotment entry will be permanently deleted.",
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteBedAllotment(allotmentId);
       setAllotments(prev => prev.filter(a => a._id !== allotmentId));
@@ -142,6 +150,7 @@ export default function IpdBedAllotment() {
     const chargeVal = parseFloat(editEnd.charge);
     if (editEnd.charge !== "" && (isNaN(chargeVal) || chargeVal < 0))
       return toast.error("Enter a valid charge");
+    if (!(await confirm({ title: "Save changes?", description: "This will update this bed allotment entry." }))) return;
     try {
       const payload: any = {
         endDate: editEnd.endDate,
@@ -163,10 +172,13 @@ export default function IpdBedAllotment() {
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
   if (!patient) return <div className="flex items-center justify-center h-64 text-red-500">Patient not found</div>;
 
-  const openEndDate: Date = patient.estimateEndDate
-    ? new Date(patient.estimateEndDate)
-    : liveNow;
-  const hasManualEstimate = Boolean(patient.estimateEndDate);
+  // Mirror the same priority used by the Billing page:
+  //   discharge date (if set) → estimate/reference date → live now
+  const isDischargedRef  = Boolean(patient.dischargeDate);
+  const hasManualEstimate = Boolean(patient.dischargeDate || patient.estimateEndDate);
+  const openEndDate: Date = patient.dischargeDate
+    ? new Date(patient.dischargeDate)
+    : (patient.estimateEndDate ? new Date(patient.estimateEndDate) : liveNow);
 
   const totalBedCharge = allotments.reduce((s, a) => {
     if (!a.allotmentDate) return s;
@@ -219,7 +231,8 @@ export default function IpdBedAllotment() {
             <div className="md:col-span-2">
               <span className="text-xs text-gray-500 block">
                 Total Bed Charge
-                {hasManualEstimate && <span className="ml-1 text-amber-600">(manual ref)</span>}
+                {isDischargedRef && <span className="ml-1 text-red-500">(till discharge)</span>}
+                {!isDischargedRef && hasManualEstimate && <span className="ml-1 text-amber-600">(ref date)</span>}
               </span>
               <span className="font-bold text-indigo-700">{fmt(totalBedCharge)}</span>
             </div>
@@ -463,9 +476,13 @@ export default function IpdBedAllotment() {
                             {fmtDate(a.endDate)}
                             {a.endTime ? <span className="text-xs text-gray-400 ml-1">{a.endTime}</span> : ""}
                           </>
+                        ) : isDischargedRef ? (
+                          <span className="text-xs text-red-600 font-medium">
+                            {fmtDate(openEndDate)} <span className="text-gray-400">(discharge date)</span>
+                          </span>
                         ) : hasManualEstimate ? (
                           <span className="text-xs text-amber-600 font-medium">
-                            {fmtDate(openEndDate)} <span className="text-gray-400">(manual ref)</span>
+                            {fmtDate(openEndDate)} <span className="text-gray-400">(ref date)</span>
                           </span>
                         ) : (
                           <span className="text-xs text-green-600 font-medium">Active (live)</span>
@@ -549,6 +566,8 @@ export default function IpdBedAllotment() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog />
     </div>
   );
 }

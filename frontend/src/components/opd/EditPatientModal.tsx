@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import opdService from "@/services/opdService";
 
 const TITLES = ["Mr", "Mrs", "Ms", "Dr", "Baby", "Master"];
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function EditPatientModal({ patientId, open, onOpenChange, onSaved }: Props) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,6 +40,7 @@ export default function EditPatientModal({ patientId, open, onOpenChange, onSave
     if (!form?.name)  return toast.error("Patient name is required");
     if (!form?.gender) return toast.error("Gender is required");
     if (!form?.phone)  return toast.error("Phone number is required");
+    if (!(await confirm({ title: "Save changes?", description: "This will update this patient's details." }))) return;
 
     setSaving(true);
     try {
@@ -178,6 +181,7 @@ export default function EditPatientModal({ patientId, open, onOpenChange, onSave
             </div>
           </div>
         )}
+        <ConfirmDialog />
       </DialogContent>
     </Dialog>
   );

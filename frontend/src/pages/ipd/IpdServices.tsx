@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Pencil, Trash2, Plus, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
   IPD_REFERRAL_DOCTORS, CatalogueService, ServiceGroup,
   buildServiceGroups, SERVICE_GROUP_META, computeBillingDays,
@@ -84,6 +85,7 @@ const BLANK: {
 export default function IpdServices() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,       setPatient]       = useState<any>(null);
   const [entries,       setEntries]       = useState<BillingEntry[]>([]);
@@ -229,6 +231,13 @@ export default function IpdServices() {
     if (!finalServiceName || finalServiceName === "__custom__") return toast.error("Enter a service name");
     if (needsDoctor && !form.doctorName.trim()) return toast.error("Doctor name is required");
     const grp = activeGroup!;
+    if (!(await confirm({
+      title: editingId ? "Update service entry?" : "Add service entry?",
+      description: editingId
+        ? "This will update the existing service entry."
+        : "This will add a new service charge for this patient.",
+      confirmText: editingId ? "Yes, update" : "Yes, add",
+    }))) return;
     setSaving(true);
     try {
       const payload = {
@@ -258,7 +267,12 @@ export default function IpdServices() {
   };
 
   const handleDelete = async (entryId: string) => {
-    if (!confirm("Remove this service entry?")) return;
+    if (!(await confirm({
+      title: "Remove service entry?",
+      description: "This service entry will be permanently removed.",
+      confirmText: "Yes, remove",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteBillingEntry(entryId);
       setEntries(prev => prev.filter(e => e._id !== entryId));
@@ -619,6 +633,8 @@ export default function IpdServices() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog />
     </div>
   );
 }

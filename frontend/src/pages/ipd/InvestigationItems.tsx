@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationItem, InvestigationVendor } from "@/services/ipdService";
 
 const CATEGORIES = [
@@ -32,6 +33,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function InvestigationItems() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [items,    setItems]    = useState<InvestigationItem[]>([]);
   const [vendors,  setVendors]  = useState<InvestigationVendor[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -126,6 +128,13 @@ export default function InvestigationItems() {
       isActive:    formActive,
     };
 
+    if (!(await confirm({
+      title: editTarget ? "Update item?" : "Add item?",
+      description: editTarget
+        ? "This will update the investigation item in the catalog."
+        : "This will add a new investigation item to the catalog.",
+      confirmText: editTarget ? "Yes, update" : "Yes, add",
+    }))) return;
     setSaving(true);
     try {
       if (editTarget) {
@@ -145,7 +154,12 @@ export default function InvestigationItems() {
   }
 
   async function handleDelete(item: InvestigationItem) {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+    if (!(await confirm({
+      title: "Delete item?",
+      description: `"${item.name}" will be permanently deleted from the catalog.`,
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteInvestigationItem(item._id);
       toast.success("Deleted");
@@ -392,6 +406,8 @@ export default function InvestigationItems() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog />
     </div>
   );
 }

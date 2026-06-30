@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Printer, CheckCircle2 } from "lucide-react";
 import logoUrl from "@/assets/logo.png";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
 
 interface ServiceItem { serviceName: string; charge: number; }
@@ -177,6 +178,7 @@ function printReceipt(booking: any, patient: OpdPatient) {
 }
 
 export default function BookingForm({ patient, existingBookings, onSaved, isNewRegistration = false }: Props) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const today = new Date().toISOString().split("T")[0];
 
   const lastDoctor = !isNewRegistration && existingBookings.length > 0 
@@ -227,6 +229,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
     if (!doctorName)                       return toast.error("Please select a doctor");
     if (!visitDate)                        return toast.error("Please select a visit date");
     if (services.some(s => !s.serviceName)) return toast.error("Please fill all service names");
+    if (!(await confirm({ title: "Save booking?", description: "This will save the OPD booking for this patient.", confirmText: "Yes, save" }))) return;
 
     setSaving(true);
     try {
@@ -505,6 +508,8 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog />
     </div>
   );
 }

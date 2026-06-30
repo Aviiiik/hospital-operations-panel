@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/lib/Api";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface User {
   _id: string;
@@ -34,6 +35,7 @@ interface EditUserModalProps {
 }
 
 export default function EditUserModal({ isOpen, onClose, user, onSuccess }: EditUserModalProps) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -71,6 +73,7 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
     e.preventDefault();
     if (!user) return;
 
+    if (!(await confirm({ title: "Save changes?", description: "This will update this user's details." }))) return;
     setLoading(true);
     try {
       await api.put(`/users/${user._id}`, formData);
@@ -155,6 +158,7 @@ export default function EditUserModal({ isOpen, onClose, user, onSuccess }: Edit
             </Button>
           </div>
         </form>
+        <ConfirmDialog />
       </DialogContent>
     </Dialog>
   );

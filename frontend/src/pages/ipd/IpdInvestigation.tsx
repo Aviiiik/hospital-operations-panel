@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationVendor, InvestigationItem } from "@/services/ipdService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ function TestSelect({ value, catalogueItems, filterCategory, onSelect }: TestSel
 export default function IpdInvestigation() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,        setPatient]        = useState<any>(null);
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
@@ -357,6 +359,13 @@ export default function IpdInvestigation() {
     if (!items.some(it => it.description.trim()))
       return toast.error("Add at least one investigation item");
     if (!id) return;
+    if (!(await confirm({
+      title: editingId ? "Update requisition?" : "Save requisition?",
+      description: editingId
+        ? "This will update the existing investigation requisition."
+        : "This will save a new investigation requisition for this patient.",
+      confirmText: editingId ? "Yes, update" : "Yes, save",
+    }))) return;
 
     const resolvedVendor = vendorId === "__none__"
       ? ""
@@ -398,7 +407,12 @@ export default function IpdInvestigation() {
   };
 
   const handleDelete = async (invId: string) => {
-    if (!confirm("Delete this requisition?")) return;
+    if (!(await confirm({
+      title: "Delete requisition?",
+      description: "This investigation requisition will be permanently deleted.",
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteInvestigation(invId);
       setInvestigations(prev => prev.filter(inv => inv._id !== invId));
@@ -849,6 +863,7 @@ export default function IpdInvestigation() {
         </DialogContent>
       </Dialog>
 
+      <ConfirmDialog />
     </div>
   );
 }

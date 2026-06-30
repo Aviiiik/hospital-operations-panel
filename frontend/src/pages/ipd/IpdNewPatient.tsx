@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Plus, Trash2, ChevronDown } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BED_CHARGES, BLOOD_GROUPS, DIET_TYPES,
@@ -86,6 +87,7 @@ const EMPTY = {
 type Doctor = { slNo: number; doctorName: string };
 
 export default function IpdNewPatient() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [form, setForm]               = useState({ ...EMPTY });
   const [doctors, setDoctors]         = useState<Doctor[]>([]);
   const [selectedDoc, setSelectedDoc] = useState("");
@@ -141,6 +143,7 @@ export default function IpdNewPatient() {
     if (!form.name.trim())  return toast.error("Patient name is required");
     if (!form.gender)       return toast.error("Gender is required");
     if (!form.phone.trim()) return toast.error("Phone number is required");
+    if (!(await confirm({ title: "Admit this patient?", description: "This will admit the patient and create a new IPD record.", confirmText: "Yes, admit" }))) return;
 
     setSaving(true);
     try {
@@ -547,6 +550,8 @@ export default function IpdNewPatient() {
           {saving ? "Saving..." : "Admit Patient"}
         </Button>
       </div>
+
+      <ConfirmDialog />
     </div>
   );
 }

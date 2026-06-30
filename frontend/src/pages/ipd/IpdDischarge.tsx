@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Printer, IndianRupee, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { DISCHARGE_TYPES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 
@@ -212,13 +213,15 @@ ${medicines.length > 0 ? `<p class="sec-title">MEDICINES DISPENSED :-</p><div cl
 export default function IpdDischarge() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,        setPatient]        = useState<any>(null);
-  const [billingSummary, setBillingSummary]  = useState<{ gross: number; discount: number; net: number; count: number } | null>(null);
-  const [bedAllotments,  setBedAllotments]  = useState<any[]>([]);
-  const [invTotal,       setInvTotal]       = useState(0);
-  const [pharmTotal,     setPharmTotal]     = useState(0);
-  const [pharmMedicines, setPharmMedicines] = useState<string[]>([]);
+  const [billingSummary,  setBillingSummary]  = useState<{ gross: number; discount: number; net: number; count: number } | null>(null);
+  const [bedAllotments,   setBedAllotments]  = useState<any[]>([]);
+  const [invTotal,        setInvTotal]       = useState(0);
+  const [pharmTotal,      setPharmTotal]     = useState(0);
+  const [pharmMedicines,  setPharmMedicines] = useState<string[]>([]);
+  const [receiptSummary,  setReceiptSummary] = useState<{ totalReceived: number; totalTds: number; totalDisallowed: number } | null>(null);
   const [loading,        setLoading]         = useState(true);
   const [saving,         setSaving]          = useState(false);
 
@@ -247,11 +250,13 @@ export default function IpdDischarge() {
       ipdService.getBedAllotments(id),
       ipdService.getInvestigations(id),
       ipdService.getPharmacyBills(id),
-    ]).then(([pr, br, asr, invR, phR]) => {
+      ipdService.getReceiptSummary(id),
+    ]).then(([pr, br, asr, invR, phR, rr]) => {
       const p = pr.data.data;
       setPatient(p);
       setBillingSummary(br.data.data);
       setBedAllotments(asr.data.data.allotments || []);
+      setReceiptSummary(rr.data.data || null);
       const investigations: any[] = invR.data.data.investigations || [];
       setInvTotal(investigations.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0));
       const pharmBills: any[] = phR.data.data.bills || [];
@@ -279,11 +284,35 @@ export default function IpdDischarge() {
   const handleSave = async (markDischarged = false) => {
     if (!form.dischargeDate) return toast.error("Discharge date is required");
     if (!form.dischargeType) return toast.error("Discharge type is required");
+    if (!(await confirm({
+      title: markDischarged ? "Discharge this patient?" : "Save discharge note?",
+      description: markDischarged
+        ? "This will mark the patient as discharged and generate the final bill. This cannot be easily undone."
+        : "This will save the discharge note for this patient.",
+      confirmText: markDischarged ? "Yes, discharge" : "Yes, save",
+      destructive: markDischarged,
+    }))) return;
     setSaving(true);
     try {
       const payload: any = { ...form };
       if (markDischarged) payload.status = "Discharged";
       await ipdService.updatePatient(id!, payload);
+
+      // Close any open bed allotments so the allotment page stays in sync
+      if (markDischarged && form.dischargeDate) {
+        const activeAllotments = bedAllotments.filter((a: any) => !a.endDate);
+        if (activeAllotments.length > 0) {
+          await Promise.all(
+            activeAllotments.map((a: any) =>
+              ipdService.updateBedAllotment(a._id, {
+                endDate: form.dischargeDate,
+                endTime: form.dischargeTime || undefined,
+              })
+            )
+          );
+        }
+      }
+
       toast.success(markDischarged ? "Patient discharged successfully" : "Discharge note saved");
       if (markDischarged) navigate("/ipd/search");
     } catch (err: any) {
@@ -320,16 +349,26 @@ export default function IpdDischarge() {
       }, 0)
     : (() => {
         const rate = patient.bedCategory ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
-        const end = patient.dischargeDate ? new Date(patient.dischargeDate) : openFallback;
-        const days = patient.admissionDate && end
-          ? computeBillingDays(new Date(patient.admissionDate), end)
+        const days = patient.admissionDate && openFallback
+          ? computeBillingDays(new Date(patient.admissionDate), openFallback)
           : billingDays;
         return rate * days;
       })();
 
-  const bedTotal    = patient.bedChargeOverride != null ? patient.bedChargeOverride : computedBedTotal;
-  const servicesNet = billingSummary?.net ?? 0;
-  const grandTotal  = bedTotal + servicesNet + invTotal + pharmTotal;
+  const servicesGross    = billingSummary?.gross ?? 0;
+  const servicesDiscount = billingSummary?.discount ?? 0;
+  const servicesNet      = billingSummary?.net ?? 0;
+  const preDiscTotal     = computedBedTotal + servicesGross + invTotal + pharmTotal - servicesDiscount;
+  const billDisc         = patient.billDiscount ?? 0;
+  const billDiscType     = patient.billDiscountType ?? "flat";
+  const billDiscAmt      = billDisc > 0
+    ? (billDiscType === "percent" ? preDiscTotal * billDisc / 100 : billDisc)
+    : 0;
+  const grandTotal       = preDiscTotal - billDiscAmt;
+  const totalPaid        = receiptSummary?.totalReceived ?? 0;
+  const totalTds         = receiptSummary?.totalTds ?? 0;
+  const totalDis         = receiptSummary?.totalDisallowed ?? 0;
+  const netDue           = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
 
   return (
     <div className="space-y-5 max-w-4xl">
@@ -416,7 +455,7 @@ export default function IpdDischarge() {
         <Card className="border-blue-100">
           <CardContent className="pt-3 pb-3 text-center">
             <p className="text-xs text-gray-500">Bed Charges</p>
-            <p className="text-lg font-bold text-blue-700">{fmtRs(bedTotal)}</p>
+            <p className="text-lg font-bold text-blue-700">{fmtRs(computedBedTotal)}</p>
           </CardContent>
         </Card>
         <Card className="border-purple-100">
@@ -596,6 +635,81 @@ export default function IpdDischarge() {
         </CardContent>
       </Card>
 
+      {/* Bill Summary */}
+      <Card className="border-gray-200">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Bill Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-end">
+            <div className="min-w-72 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Bed Charge</span>
+                <span className="font-medium">{fmtRs(computedBedTotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Nursing Home Charge</span>
+                <span className="font-medium">{fmtRs(servicesGross)}</span>
+              </div>
+              {servicesDiscount > 0 && (
+                <div className="flex justify-between text-red-500 text-xs">
+                  <span>(-)Service Discount</span>
+                  <span>{fmtRs(servicesDiscount)}</span>
+                </div>
+              )}
+              {invTotal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Investigations</span>
+                  <span className="font-medium">{fmtRs(invTotal)}</span>
+                </div>
+              )}
+              {pharmTotal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Pharmacy</span>
+                  <span className="font-medium">{fmtRs(pharmTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-1.5">
+                <span className="text-gray-700 font-medium">Net Total</span>
+                <span className="font-semibold">{fmtRs(preDiscTotal)}</span>
+              </div>
+              {billDiscAmt > 0 && (
+                <div className="flex justify-between text-red-500 text-xs">
+                  <span>(-)Bill Discount{billDiscType === "percent" ? ` (${billDisc}%)` : ""}</span>
+                  <span>{fmtRs(billDiscAmt)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-600">Grand Total</span>
+                <span className="font-semibold">{fmtRs(grandTotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Paid</span>
+                <span className="font-medium text-green-700">{fmtRs(totalPaid)}</span>
+              </div>
+              {totalTds > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">TDS</span>
+                  <span className="font-medium">{fmtRs(totalTds)}</span>
+                </div>
+              )}
+              {totalDis > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Disallowed</span>
+                  <span className="font-medium">{fmtRs(totalDis)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t-2 border-gray-900 pt-2 mt-1">
+                <span className="font-bold">Payable By Patient</span>
+                <span className={`text-xl font-bold ${netDue > 0 ? "text-red-700" : "text-green-700"}`}>
+                  {fmtRs(netDue)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Actions */}
       <div className="flex justify-end gap-3 pb-6">
         <Button variant="outline" onClick={() => navigate(`/ipd/edit/${id}`)}>
@@ -621,6 +735,8 @@ export default function IpdDischarge() {
             : "Discharge Patient"}
         </Button>
       </div>
+
+      <ConfirmDialog />
     </div>
   );
 }
