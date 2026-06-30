@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ArrowRight } from "lucide-react";
 import BookingForm, { OpdPatient } from "@/components/opd/BookingForm";
 import opdService, { REGISTRATION_TYPES } from "@/services/opdService";
@@ -39,6 +40,7 @@ const EMPTY_FORM = {
 };
 
 export default function NewPatient() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [nextId, setNextId] = useState<{ patientId: string } | null>(null);
@@ -73,6 +75,7 @@ export default function NewPatient() {
     if (!form.name) return toast.error("Patient name is required");
     if (!form.gender) return toast.error("Gender is required");
     if (!form.phone) return toast.error("Phone number is required");
+    if (!(await confirm({ title: "Register patient?", description: "This will register the patient and create a new OPD record.", confirmText: "Yes, register" }))) return;
 
     setSaving(true);
     try {
@@ -303,6 +306,8 @@ export default function NewPatient() {
           </table>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog />
     </div>
   );
 }

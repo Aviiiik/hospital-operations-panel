@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
 
 interface Doctor { _id: string; name: string; department: string; fees: number; }
@@ -22,6 +23,7 @@ interface Props {
 const STATUS_OPTIONS = ["Paid", "Unpaid", "Cancelled"];
 
 export default function EditBookingModal({ bookingId, open, onOpenChange, onSaved }: Props) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -75,6 +77,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
   const handleSave = async () => {
     if (!form.doctorName) return toast.error("Please select a doctor");
     if (!form.visitDate)  return toast.error("Please select a visit date");
+    if (!(await confirm({ title: "Save changes?", description: "This will update the OPD booking." }))) return;
 
     setSaving(true);
     try {
@@ -239,6 +242,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
             </div>
           </div>
         )}
+        <ConfirmDialog />
       </DialogContent>
     </Dialog>
   );

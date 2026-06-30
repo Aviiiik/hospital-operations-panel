@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import api from "@/lib/Api";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface User {
   _id: string;
@@ -24,6 +25,7 @@ interface ChangePasswordModalProps {
 }
 
 export default function ChangePasswordModal({ isOpen, onClose, user }: ChangePasswordModalProps) {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -45,6 +47,7 @@ export default function ChangePasswordModal({ isOpen, onClose, user }: ChangePas
       return;
     }
 
+    if (!(await confirm({ title: "Change password?", description: "This will reset this user's password." }))) return;
     setLoading(true);
     try {
       await api.patch(`/users/${user._id}/password`, { newPassword });
@@ -114,6 +117,7 @@ export default function ChangePasswordModal({ isOpen, onClose, user }: ChangePas
             </Button>
           </div>
         </form>
+        <ConfirmDialog />
       </DialogContent>
     </Dialog>
   );

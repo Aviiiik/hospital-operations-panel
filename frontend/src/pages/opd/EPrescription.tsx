@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Printer, CheckCircle2, Search, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import opdService, { MEDICINES } from "@/services/opdService";
 
 const FREQUENCIES = [
@@ -146,6 +147,7 @@ function printPrescription(prescription: any, patient: Patient) {
 }
 
 export default function EPrescription() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   // Search state
@@ -214,6 +216,7 @@ export default function EPrescription() {
     if (!doctorName)       return toast.error("Please select a doctor");
     if (!visitDate)        return toast.error("Please select a visit date");
     if (medicines.some(m => !m.medicineName)) return toast.error("Fill all medicine names");
+    if (!(await confirm({ title: "Save prescription?", description: "This will save the prescription for this patient.", confirmText: "Yes, save" }))) return;
 
     setSaving(true);
     try {
@@ -503,6 +506,8 @@ export default function EPrescription() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog />
     </div>
   );
 }

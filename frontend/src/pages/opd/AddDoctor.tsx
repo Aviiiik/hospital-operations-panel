@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 export default function AddDoctor() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function AddDoctor() {
       return;
     }
 
+    if (!(await confirm({ title: "Create doctor?", description: "This will add a new doctor.", confirmText: "Yes, create" }))) return;
     setLoading(true);
     try {
       await opdService.createDoctor(formData);
@@ -236,6 +239,8 @@ export default function AddDoctor() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog />
     </div>
   );
 }

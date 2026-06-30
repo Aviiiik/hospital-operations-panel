@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Printer, Receipt } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { BED_CHARGES, computeBillingDays } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 
@@ -467,6 +468,7 @@ ${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDisco
 export default function IpdBilling() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,        setPatient]        = useState<any>(null);
   const [entries,        setEntries]        = useState<BillingEntry[]>([]);
@@ -475,9 +477,6 @@ export default function IpdBilling() {
   const [receiptSummary, setReceiptSummary] = useState<ReceiptSummary | null>(null);
   const [pharmBills,     setPharmBills]     = useState<PharmBill[]>([]);
   const [loading,        setLoading]        = useState(true);
-  const [overrideInput,  setOverrideInput]  = useState("");
-  const [overrideSaved,  setOverrideSaved]  = useState<number | null>(null);
-  const [savingOverride, setSavingOverride] = useState(false);
   const [billDiscInput,    setBillDiscInput]    = useState("");
   const [billDiscType,     setBillDiscType]     = useState<"flat" | "percent">("flat");
   const [billDiscSaved,    setBillDiscSaved]    = useState<number | null>(null);
@@ -509,31 +508,6 @@ export default function IpdBilling() {
         setBedAllotments(allotments);
         setReceiptSummary(rRes.data.data || null);
         setPharmBills(phRes.data.data.bills || []);
-
-        if (p.bedChargeOverride != null) {
-          setOverrideSaved(p.bedChargeOverride);
-          setOverrideInput(String(p.bedChargeOverride));
-        } else {
-          const openEnd: Date = p.dischargeDate
-            ? new Date(p.dischargeDate)
-            : (p.estimateEndDate ? new Date(p.estimateEndDate) : new Date());
-          const computed = allotments.length > 0
-            ? allotments.reduce((s, a) => {
-                if (!a.allotmentDate) return s;
-                const days = a.endDate
-                  ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-                  : computeBillingDays(new Date(a.allotmentDate), openEnd);
-                return s + days * (a.charge || 0);
-              }, 0)
-            : (() => {
-                const rate = p.bedCategory ? (BED_CHARGES[p.bedCategory] ?? 0) : 0;
-                const days = p.admissionDate
-                  ? computeBillingDays(new Date(p.admissionDate), openEnd)
-                  : 1;
-                return rate * days;
-              })();
-          setOverrideInput(String(computed));
-        }
 
         if (p.billDiscount != null) {
           setBillDiscSaved(p.billDiscount);
@@ -610,9 +584,7 @@ export default function IpdBilling() {
       }, 0)
     : (fallbackBed?.charge ?? 0);
 
-  const effectiveBedTotal = overrideSaved !== null ? overrideSaved : totalBedCharge;
-
-  const totalCharge    = effectiveBedTotal + servicesGross + invTotal + pharmTotal;
+  const totalCharge    = totalBedCharge + servicesGross + invTotal + pharmTotal;
   const preDiscTotal   = totalCharge - servicesDiscount;
   const billDiscAmt    = billDiscSaved != null
     ? (billDiscType === "percent" ? preDiscTotal * billDiscSaved / 100 : billDiscSaved)
@@ -626,34 +598,11 @@ export default function IpdBilling() {
   const isEstimate   = patient.status !== "Discharged";
   const billLabel    = isEstimate ? "ESTIMATED BILL" : "FINAL BILL";
 
-  const handleSaveOverride = async () => {
-    const raw = overrideInput.trim();
-    const val = raw !== "" ? Number(raw) : totalBedCharge;
-    if (isNaN(val) || val < 0) return toast.error("Enter a valid amount");
-    setSavingOverride(true);
-    try {
-      await ipdService.updatePatient(id!, { bedChargeOverride: val });
-      setOverrideSaved(val);
-      toast.success("Bed charge saved");
-    } catch { toast.error("Failed to save"); }
-    finally { setSavingOverride(false); }
-  };
-
-  const handleClearOverride = async () => {
-    setSavingOverride(true);
-    try {
-      await ipdService.updatePatient(id!, { bedChargeOverride: null });
-      setOverrideSaved(null);
-      setOverrideInput("");
-      toast.success("Reverted to computed bed charge");
-    } catch { toast.error("Failed to clear"); }
-    finally { setSavingOverride(false); }
-  };
-
   const handleSaveBillDisc = async () => {
     const val = Number(billDiscInput);
     if (isNaN(val) || val < 0) return toast.error("Enter a valid discount");
     if (billDiscType === "percent" && val > 100) return toast.error("Percentage cannot exceed 100");
+    if (!(await confirm({ title: "Save bill discount?", description: "This discount will be applied to the patient's total bill." }))) return;
     setSavingBillDisc(true);
     try {
       await ipdService.updatePatient(id!, { billDiscount: val, billDiscountType: billDiscType });
@@ -677,6 +626,7 @@ export default function IpdBilling() {
 
   const handleSetEstimate = async () => {
     if (!estDate) return toast.error("Select a date");
+    if (!(await confirm({ title: "Save reference date?", description: "This reference date will be used across all billing pages for this patient." }))) return;
     setEstSaving(true);
     try {
       const estDt = new Date(`${estDate}T${estTime || "00:00"}`);
@@ -708,7 +658,7 @@ export default function IpdBilling() {
       buildDetailedBillHtml(
         billLabel, patient, entries, investigations, bedAllotments, pharmBills,
         fallbackBed, fallbackEndDate,
-        effectiveBedTotal, servicesDiscount, servicesGross, servicesNet,
+        totalBedCharge, servicesDiscount, servicesGross, servicesNet,
         invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
       ),
     );
@@ -718,7 +668,7 @@ export default function IpdBilling() {
       `${billLabel} (Summary) — ${patient.admissionId}`,
       buildSummaryBillHtml(
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
-        effectiveBedTotal,
+        totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
         servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         investigations, pharmBills,
@@ -934,36 +884,9 @@ export default function IpdBilling() {
                   </tbody>
                 </table>
               )}
-              {/* Bed charge save row */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-t bg-gray-50 gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-700">Total Bed Charge</span>
-                  {overrideSaved !== null && (
-                    <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">manual override</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {overrideSaved === null && (
-                    <span className="text-xs text-gray-400">computed: {fmt(totalBedCharge)}</span>
-                  )}
-                  <Input
-                    type="number"
-                    value={overrideInput}
-                    onChange={e => setOverrideInput(e.target.value)}
-                    placeholder={fmt(totalBedCharge).replace("₹", "")}
-                    className="h-7 text-xs w-32 text-right"
-                  />
-                  <Button size="sm" className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
-                    onClick={handleSaveOverride} disabled={savingOverride}>
-                    {savingOverride ? "…" : "Save"}
-                  </Button>
-                  {overrideSaved !== null && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-gray-500"
-                      onClick={handleClearOverride} disabled={savingOverride}>
-                      Reset
-                    </Button>
-                  )}
-                </div>
+              <div className="flex items-center justify-between px-4 py-2.5 border-t bg-gray-50">
+                <span className="text-sm font-medium text-gray-700">Total Bed Charge</span>
+                <span className="font-bold text-indigo-700">{fmt(totalBedCharge)}</span>
               </div>
             </CardContent>
           </Card>
@@ -1110,8 +1033,8 @@ export default function IpdBilling() {
               <div className="flex justify-end">
                 <div className="min-w-72 space-y-1.5 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Bed Charge{overrideSaved !== null ? " (saved)" : ""}</span>
-                    <span className="font-medium">{fmt(effectiveBedTotal)}</span>
+                    <span className="text-gray-600">Total Bed Charge</span>
+                    <span className="font-medium">{fmt(totalBedCharge)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Nursing Home Charge</span>
@@ -1382,6 +1305,8 @@ export default function IpdBilling() {
           )}
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog />
     </div>
   );
 }

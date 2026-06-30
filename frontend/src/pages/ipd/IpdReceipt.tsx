@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 
@@ -298,6 +299,7 @@ function printAllReceipts(
 export default function IpdReceipt() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [patient,       setPatient]       = useState<any>(null);
   const [receipts,      setReceipts]      = useState<ReceiptEntry[]>([]);
@@ -380,6 +382,7 @@ export default function IpdReceipt() {
     if (!form.receiptAmount || Number(form.receiptAmount) <= 0)
       return toast.error("Enter a valid receipt amount");
     if (!form.receiptDate) return toast.error("Receipt date is required");
+    if (!(await confirm({ title: "Save receipt?", description: "This will record a new payment receipt for this patient.", confirmText: "Yes, save" }))) return;
     setSaving(true);
     try {
       await ipdService.createReceipt(id!, form);
@@ -396,7 +399,12 @@ export default function IpdReceipt() {
   };
 
   const handleDelete = async (receiptId: string) => {
-    if (!confirm("Delete this receipt?")) return;
+    if (!(await confirm({
+      title: "Delete receipt?",
+      description: "This payment receipt will be permanently deleted.",
+      confirmText: "Yes, delete",
+      destructive: true,
+    }))) return;
     try {
       await ipdService.deleteReceipt(receiptId);
       setReceipts(prev => prev.filter(r => r._id !== receiptId));
@@ -809,6 +817,8 @@ export default function IpdReceipt() {
           <span className="text-2xl font-bold text-green-700">{fmt(totalReceived)}</span>
         </CardContent>
       </Card>
+
+      <ConfirmDialog />
     </div>
   );
 }

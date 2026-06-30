@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 export default function AddUser() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -65,6 +67,7 @@ export default function AddUser() {
       return;
     }
 
+    if (!(await confirm({ title: "Create user?", description: "This will create a new user account.", confirmText: "Yes, create" }))) return;
     setLoading(true);
 
     try {
@@ -255,6 +258,8 @@ export default function AddUser() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog />
     </div>
   );
 }
