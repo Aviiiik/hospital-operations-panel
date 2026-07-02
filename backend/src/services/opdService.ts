@@ -36,15 +36,16 @@ async function getNextMonthlySerial(): Promise<{ year: string; month: string; se
 }
 
 async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; serial: string }> {
-  const { year } = istYearMonth();
-  const yearStart = new Date(`${year}-01-01T00:00:00+05:30`);
-  const yearEnd   = new Date(`${year + 1}-01-01T00:00:00+05:30`);
-  yearEnd.setMilliseconds(yearEnd.getMilliseconds() - 1);
-  // Use createdAt (always set by Mongoose) instead of registrationDate (can be null if a
-  // form submission sent an empty string, which Mongoose silently casts to null for Date fields).
-  const count = await OpdPatient.countDocuments({ createdAt: { $gte: yearStart, $lte: yearEnd } });
-  const serial = String(count + 1).padStart(5, "0");
-  return { shortYear: String(year).slice(-2), serial };
+  const shortYear = String(istYearMonth().year).slice(-2);
+  // Find the highest-numbered registration for this year and add 1.
+  // count+1 breaks when any patient is deleted — a gap in documents would
+  // produce a serial that's already taken by a still-existing patient.
+  const last = await OpdPatient.findOne(
+    { registrationNo: { $regex: `^${shortYear}/` } },
+    { registrationNo: 1 }
+  ).sort({ registrationNo: -1 });
+  const nextSerial = last ? parseInt(last.registrationNo.split("/")[1], 10) + 1 : 1;
+  return { shortYear, serial: String(nextSerial).padStart(5, "0") };
 }
 
 export async function getDoctors() {
