@@ -127,6 +127,10 @@ function printReceipt(booking: any, patient: OpdPatient) {
         <td class="label">Visit Date:</td><td>${new Date(booking.visitDate).toLocaleDateString("en-IN")}</td>
         <td class="label">Status:</td><td><b style="color:green;">${booking.status}</b></td>
       </tr>
+      <tr>
+        <td class="label">Valid Till:</td><td><b>${patient.validity ? new Date(patient.validity).toLocaleDateString("en-IN") : "N/A"}</b></td>
+        <td></td><td></td>
+      </tr>
     </table>
 
     <table>

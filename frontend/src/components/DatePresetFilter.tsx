@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 
-export type DatePreset = "today" | "yesterday" | "this_week" | "this_month" | "last_month";
+export type DatePreset = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "last_3_months" | "last_6_months";
 
 export function getDateRange(preset: DatePreset): { from: Date; to: Date } {
   const now = new Date();
@@ -34,15 +34,31 @@ export function getDateRange(preset: DatePreset): { from: Date; to: Date } {
       const to   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
       return { from, to };
     }
+    case "last_3_months": {
+      const from = new Date(now);
+      from.setMonth(from.getMonth() - 3);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(now); to.setHours(23, 59, 59, 999);
+      return { from, to };
+    }
+    case "last_6_months": {
+      const from = new Date(now);
+      from.setMonth(from.getMonth() - 6);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(now); to.setHours(23, 59, 59, 999);
+      return { from, to };
+    }
   }
 }
 
 const PRESETS: { label: string; value: DatePreset }[] = [
-  { label: "Today",      value: "today"      },
-  { label: "Yesterday",  value: "yesterday"  },
-  { label: "This Week",  value: "this_week"  },
-  { label: "This Month", value: "this_month" },
-  { label: "Last Month", value: "last_month" },
+  { label: "Today",        value: "today"        },
+  { label: "Yesterday",    value: "yesterday"    },
+  { label: "This Week",    value: "this_week"    },
+  { label: "This Month",   value: "this_month"   },
+  { label: "Last Month",   value: "last_month"   },
+  { label: "Last 3 Months", value: "last_3_months" },
+  { label: "Last 6 Months", value: "last_6_months" },
 ];
 
 interface Props {
