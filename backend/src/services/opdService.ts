@@ -40,7 +40,9 @@ async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; s
   const yearStart = new Date(`${year}-01-01T00:00:00+05:30`);
   const yearEnd   = new Date(`${year + 1}-01-01T00:00:00+05:30`);
   yearEnd.setMilliseconds(yearEnd.getMilliseconds() - 1);
-  const count = await OpdPatient.countDocuments({ registrationDate: { $gte: yearStart, $lte: yearEnd } });
+  // Use createdAt (always set by Mongoose) instead of registrationDate (can be null if a
+  // form submission sent an empty string, which Mongoose silently casts to null for Date fields).
+  const count = await OpdPatient.countDocuments({ createdAt: { $gte: yearStart, $lte: yearEnd } });
   const serial = String(count + 1).padStart(5, "0");
   return { shortYear: String(year).slice(-2), serial };
 }
