@@ -76,13 +76,23 @@ export async function getNextPatientId() {
 }
 
 export async function createPatient(data: any) {
-  const { year, month, serial: monthSerial } = await getNextMonthlySerial();
-  const patientId = `OPD${year}${month}${monthSerial}`;
-  const { shortYear, serial: regSerial } = await getNextYearlyRegistrationSerial();
-  const registrationNo = `${shortYear}/${regSerial}/001`;
-  const validity = new Date();
-  validity.setMonth(validity.getMonth() + 3);
-  return OpdPatient.create({ ...data, patientId, registrationNo, sequenceNo: 1, validity });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const { year, month, serial: monthSerial } = await getNextMonthlySerial();
+      const patientId = `OPD${year}${month}${monthSerial}`;
+      const { shortYear, serial: regSerial } = await getNextYearlyRegistrationSerial();
+      const registrationNo = `${shortYear}/${regSerial}/001`;
+      const validity = new Date();
+      validity.setMonth(validity.getMonth() + 3);
+      return await OpdPatient.create({ ...data, patientId, registrationNo, sequenceNo: 1, validity });
+    } catch (err: any) {
+      // On duplicate key: another concurrent registration just won the race.
+      // Re-query the counts (which now include that patient) and retry.
+      if (err.code === 11000 && attempt < 4) continue;
+      throw err;
+    }
+  }
+  throw new Error("Failed to create patient after 5 attempts due to concurrent registrations");
 }
 
 export async function getPatient(id: string) {
