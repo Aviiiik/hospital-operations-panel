@@ -79,7 +79,7 @@ export async function createPatient(data: any) {
   const { shortYear, serial: regSerial } = await getNextYearlyRegistrationSerial();
   const registrationNo = `${shortYear}/${regSerial}/001`;
   const validity = new Date();
-  validity.setFullYear(validity.getFullYear() + 1);
+  validity.setMonth(validity.getMonth() + 3);
   return OpdPatient.create({ ...data, patientId, registrationNo, sequenceNo: 1, validity });
 }
 

@@ -19,6 +19,7 @@ interface Patient {
   _id: string; patientId: string; registrationNo: string;
   title: string; name: string; gender: string; ageYears: number;
   phone: string; registrationType: string; registrationDate: string;
+  validity?: string;
 }
 
 interface Booking {
@@ -195,6 +196,10 @@ export default function RegisteredPatient() {
         <td class="label">Visit Date:</td><td>${new Date(b.visitDate).toLocaleDateString("en-IN")}</td>
         <td class="label">Status:</td><td><b style="color:green;">${b.status}</b></td>
       </tr>
+      <tr>
+        <td class="label">Valid Till:</td><td><b>${patient.validity ? new Date(patient.validity).toLocaleDateString("en-IN") : "N/A"}</b></td>
+        <td></td><td></td>
+      </tr>
     </table>
     <table>
       <thead>
@@ -317,7 +322,7 @@ export default function RegisteredPatient() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-800 text-white text-xs">
-                      {["PATIENT ID","REG NO","PATIENT NAME","GENDER/AGE","PHONE","REG TYPE","REG DATE","ACTIONS"].map(h => (
+                      {["PATIENT ID","REG NO","PATIENT NAME","GENDER/AGE","PHONE","REG TYPE","REG DATE","VALID TILL","ACTIONS"].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-medium">{h}</th>
                       ))}
                     </tr>
@@ -334,11 +339,33 @@ export default function RegisteredPatient() {
                           <Badge variant="outline" className="text-xs">{p.registrationType}</Badge>
                         </td>
                         <td className="px-3 py-2.5 text-xs">{new Date(p.registrationDate).toLocaleDateString("en-IN")}</td>
+                        <td className="px-3 py-2.5 text-xs">
+                          {p.validity ? (() => {
+                            const exp = new Date(p.validity);
+                            const now = new Date();
+                            const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / 86400000);
+                            const label = exp.toLocaleDateString("en-IN");
+                            if (daysLeft < 0) return <span className="text-red-600 font-semibold">{label} (Expired)</span>;
+                            if (daysLeft <= 30) return <span className="text-amber-600 font-semibold">{label}</span>;
+                            return <span className="text-green-700">{label}</span>;
+                          })() : "—"}
+                        </td>
                         <td className="px-3 py-2.5">
                           <div className="flex gap-1">
-                            <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => handleBook(p)}>
-                              <BookOpen className="h-3 w-3 mr-1" /> Booking
-                            </Button>
+                            {(() => {
+                              const expired = p.validity && new Date(p.validity) < new Date();
+                              return (
+                                <Button
+                                  size="sm"
+                                  className={`h-7 text-xs ${expired ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
+                                  onClick={() => !expired && handleBook(p)}
+                                  disabled={!!expired}
+                                  title={expired ? "Registration expired — cannot book" : undefined}
+                                >
+                                  <BookOpen className="h-3 w-3 mr-1" /> Booking
+                                </Button>
+                              );
+                            })()}
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handlePrevDetails(p)}>
                               <Eye className="h-3 w-3 mr-1" /> Prev.Dtls
                             </Button>
