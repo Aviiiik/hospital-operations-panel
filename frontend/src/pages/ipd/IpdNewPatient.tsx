@@ -5,35 +5,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { CatalogManagerModal } from "@/components/ipd/CatalogManagerModal";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Settings2 } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BED_CHARGES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS,
+  type InsuranceCompany, type Tpa,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
 
 const TITLES  = ["Mr", "Mrs", "Ms", "Dr", "Baby", "Master"];
 const GENDERS = ["Male", "Female", "Other"];
-
-const TPA_LIST = [
-  "HERITAGE HEALTH INSURANCE TPA", "GENINS INSURANCE TPA", "MED-SAVE INSURANCE TPA",
-  "PARAMOUNT INSURANCE TPA", "MD-INDIA INSURANCE TPA", "MEDI - ASSIS INSURANCE TPA",
-  "RAKSHA INSURANCE TPA", "FAMILY HEALTH INSURANCE TPA", "HEALTH INDIA INSURANCE TPA",
-  "PAREKH INSURANCE TPA", "VIDAL INSURANCE TPA", "SAFEWAY INSURANCE TPA",
-  "HEALTH INSURANCE TPA", "ALANKIT INSURANCE TPA", "GOOD HEALTH INSURANCE TPA",
-];
-
-const INSURANCE_LIST = [
-  "ICICI LOMBARD GENERAL INSURANCE", "FUTURE GENERALI INSURANCE", "BAJAJ ALIANZ GENERAL INSURANCE",
-  "IFFCO-TOKIO GENERAL INSURANCE", "HDFC ERGO GENERAL INSURANCE", "CIGNA MANIPAL GENERAL INSURANCE",
-  "UNIVERSAL SAMPO GENERAL INSURANCE", "ROYAL SUNDARAM GENERAL INSURANCE", "TATA AIG GENERAL INSURANCE",
-  "RELIANCE GENERAL INSURANCE", "CHOLA MANDALAM GENERAL INSURANCE", "MAGMA HDI GENERAL INSURANCE",
-  "ACKO GENERAL INSURANCE", "NAVI GENERAL INSURANCE CO.", "GO DIGIT GENERAL INSURANCE CO.",
-  "NATIONAL INSURANCE CO. LTD", "NEW INDIA ASSURANCE CO. LTD", "UNITED INDIA INSURANCE CO. LTD",
-  "ORIENTAL INSURANCE CO. LTD",
-];
 
 const normStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -97,6 +81,10 @@ export default function IpdNewPatient() {
   const [nextId, setNextId]           = useState("");
   const [saving, setSaving]           = useState(false);
   const [occupiedBeds, setOccupiedBeds] = useState<{ bedCategory: string; bedNo: string }[]>([]);
+  const [insuranceItems, setInsuranceItems] = useState<InsuranceCompany[]>([]);
+  const [tpaItems, setTpaItems]             = useState<Tpa[]>([]);
+  const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [showTpaModal, setShowTpaModal]             = useState(false);
 
   const occupiedNos = new Set(
     occupiedBeds.filter(b => b.bedCategory === form.bedCategory).map(b => b.bedNo)
@@ -104,15 +92,48 @@ export default function IpdNewPatient() {
   const availableBeds = (BED_CATEGORIES.find(c => c.category === form.bedCategory)?.beds ?? [])
     .filter(b => !occupiedNos.has(b));
 
+  const loadInsurance = () =>
+    ipdService.getInsuranceCompanies(true).then(r => setInsuranceItems(r.data.data.companies || [])).catch(() => {});
+  const loadTpas = () =>
+    ipdService.getTpas(true).then(r => setTpaItems(r.data.data.tpas || [])).catch(() => {});
+
   useEffect(() => {
     ipdService.getNextId().then(r => setNextId(r.data.data.admissionId)).catch(() => {});
     opdService.getDoctors().then(r => {
       setAllDoctors(r.data.data.doctors || []);
     }).catch(err => console.error("Failed to load doctors", err));
     ipdService.getOccupiedBeds().then(r => setOccupiedBeds(r.data.data.beds || [])).catch(() => {});
+    loadInsurance();
+    loadTpas();
   }, []);
 
   const set = (field: string, val: any) => setForm(f => ({ ...f, [field]: val }));
+
+  const createInsurance = async (name: string) => {
+    const res = await ipdService.createInsuranceCompany({ name });
+    setInsuranceItems(prev => [...prev, res.data.data]);
+  };
+  const updateInsurance = async (id: string, name: string, isActive: boolean) => {
+    const res = await ipdService.updateInsuranceCompany(id, { name, isActive });
+    setInsuranceItems(prev => prev.map(i => i._id === id ? res.data.data : i));
+  };
+  const deleteInsurance = async (id: string) => {
+    await ipdService.deleteInsuranceCompany(id);
+    setInsuranceItems(prev => prev.filter(i => i._id !== id));
+  };
+
+  const createTpa = async (name: string) => {
+    const res = await ipdService.createTpa({ name });
+    setTpaItems(prev => [...prev, res.data.data]);
+  };
+  const updateTpaItem = async (id: string, name: string, isActive: boolean) => {
+    const res = await ipdService.updateTpa(id, { name, isActive });
+    setTpaItems(prev => prev.map(t => t._id === id ? res.data.data : t));
+  };
+  const deleteTpaItem = async (id: string) => {
+    await ipdService.deleteTpa(id);
+    setTpaItems(prev => prev.filter(t => t._id !== id));
+  };
 
   const docHits = allDoctors.filter(d =>
     (!specFilter || d.specialization === specFilter) &&
@@ -517,12 +538,32 @@ export default function IpdNewPatient() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Insurance Company</Label>
-              <SearchableSelect options={INSURANCE_LIST} value={form.insuranceCo} onChange={v => set("insuranceCo", v)} placeholder="Search insurance..." />
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Insurance Company</Label>
+                <button type="button" onClick={() => setShowInsuranceModal(true)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Settings2 className="h-3 w-3" /> Manage
+                </button>
+              </div>
+              <SearchableSelect
+                options={insuranceItems.filter(i => i.isActive).map(i => i.name)}
+                value={form.insuranceCo}
+                onChange={v => set("insuranceCo", v)}
+                placeholder="Search insurance..."
+              />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">TPA</Label>
-              <SearchableSelect options={TPA_LIST} value={form.tpa} onChange={v => set("tpa", v)} placeholder="Search TPA..." />
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">TPA</Label>
+                <button type="button" onClick={() => setShowTpaModal(true)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Settings2 className="h-3 w-3" /> Manage
+                </button>
+              </div>
+              <SearchableSelect
+                options={tpaItems.filter(t => t.isActive).map(t => t.name)}
+                value={form.tpa}
+                onChange={v => set("tpa", v)}
+                placeholder="Search TPA..."
+              />
             </div>
             {[
               { label: "Card No",         field: "cardNo"            },
@@ -550,6 +591,25 @@ export default function IpdNewPatient() {
           {saving ? "Saving..." : "Admit Patient"}
         </Button>
       </div>
+
+      <CatalogManagerModal
+        open={showInsuranceModal}
+        onOpenChange={setShowInsuranceModal}
+        title="Insurance Companies"
+        items={insuranceItems}
+        onCreate={createInsurance}
+        onUpdate={updateInsurance}
+        onDelete={deleteInsurance}
+      />
+      <CatalogManagerModal
+        open={showTpaModal}
+        onOpenChange={setShowTpaModal}
+        title="TPAs"
+        items={tpaItems}
+        onCreate={createTpa}
+        onUpdate={updateTpaItem}
+        onDelete={deleteTpaItem}
+      />
 
       <ConfirmDialog />
     </div>

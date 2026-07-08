@@ -8,6 +8,8 @@ import InvestigationVendor from "../models/InvestigationVendor.js";
 import InvestigationItem from "../models/InvestigationItem.js";
 import IpdPharmacyBill from "../models/IpdPharmacyBill.js";
 import PharmacyMedicine from "../models/PharmacyMedicine.js";
+import InsuranceCompany from "../models/InsuranceCompany.js";
+import Tpa from "../models/Tpa.js";
 
 function istNow(): Date {
   return new Date(Date.now() + 5.5 * 60 * 60 * 1000);
@@ -319,14 +321,37 @@ export async function deleteServiceCatalogueItem(id: string) {
 
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 
-export async function getIpdDashboardStats() {
-  const IST = 5.5 * 3600 * 1000;
-  const nowIST = new Date(Date.now() + IST);
-  const todayIST = new Date(nowIST);
-  todayIST.setHours(0, 0, 0, 0);
-  const todayStartUTC = new Date(todayIST.getTime() - IST);
+// Final due amount remaining on a patient's bill (grand total minus what's
+// already been received) — mirrors the calculation on the discharge screen.
+async function computeNetDueForPatient(patient: any): Promise<number> {
+  const patientId = String(patient._id);
+  const [bedSummary, billing, investigations, pharmacy, receiptSummary] = await Promise.all([
+    getBedAllotmentSummary(patientId),
+    getBillingSummary(patientId),
+    getPatientInvestigations(patientId),
+    getPharmacyTotal(patientId),
+    getReceiptSummary(patientId),
+  ]);
 
-  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, dischargedTodayPatients] =
+  const invTotal = (investigations as any[]).reduce((s, i: any) => s + (i.totalAmount || 0), 0);
+  const preDiscTotal = bedSummary.totalBedCharge + billing.gross + invTotal + pharmacy.total - billing.discount;
+
+  const billDisc     = patient.billDiscount || 0;
+  const billDiscType = patient.billDiscountType || "flat";
+  const billDiscAmt  = billDisc > 0
+    ? (billDiscType === "percent" ? preDiscTotal * billDisc / 100 : billDisc)
+    : 0;
+  const grandTotal = preDiscTotal - billDiscAmt;
+
+  return Math.max(0, grandTotal - receiptSummary.totalReceived - receiptSummary.totalTds - receiptSummary.totalDisallowed);
+}
+
+export async function getIpdDashboardStats() {
+  // IST calendar-day boundary, computed independent of the server's local timezone.
+  const istDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
+  const todayStartUTC = new Date(`${istDate}T00:00:00+05:30`);
+
+  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, dischargedTodayPatients, receiptsAgg] =
     await Promise.all([
       IpdPatient.countDocuments({ status: "Admitted" }),
       IpdPatient.countDocuments({ admissionDate: { $gte: todayStartUTC } }),
@@ -339,25 +364,20 @@ export async function getIpdDashboardStats() {
         .lean(),
       IpdPatient.find(
         { status: "Discharged", dischargeDate: { $gte: todayStartUTC } },
-        { _id: 1 }
+        { _id: 1, billDiscount: 1, billDiscountType: 1 }
       ).lean(),
+      IpdReceipt.aggregate([
+        { $match: { receiptDate: { $gte: todayStartUTC } } },
+        { $group: { _id: null, total: { $sum: "$receiptAmount" } } },
+      ]),
     ]);
 
-  const dischargedTodayIds = dischargedTodayPatients.map((p: any) => p._id);
-
-  const revenueAgg = await IpdReceipt.aggregate([
-    {
-      $match: {
-        $or: [
-          { receiptDate: { $gte: todayStartUTC } },
-          { patientId: { $in: dischargedTodayIds } },
-        ],
-      },
-    },
-    { $group: { _id: null, total: { $sum: "$receiptAmount" } } },
-  ]);
-
-  const revenueToday = (revenueAgg[0]?.total as number) ?? 0;
+  // Revenue = receipts collected today + the final due amount left on bills
+  // of patients discharged today (recognised at discharge, even if unpaid).
+  const receiptsCollectedToday = (receiptsAgg[0]?.total as number) ?? 0;
+  const dueAmounts   = await Promise.all(dischargedTodayPatients.map((p: any) => computeNetDueForPatient(p)));
+  const finalDueToday = dueAmounts.reduce((s: number, n: number) => s + n, 0);
+  const revenueToday  = receiptsCollectedToday + finalDueToday;
 
   const recentAdmissions = (recentRaw as any[]).map(p => ({
     _id:           String(p._id),
@@ -399,6 +419,60 @@ export async function updateVendor(id: string, data: any) {
 
 export async function deleteVendor(id: string) {
   return InvestigationVendor.findByIdAndDelete(id).lean();
+}
+
+// ─── Insurance Companies ──────────────────────────────────────────────────────
+
+export async function getInsuranceCompanies(activeOnly = true) {
+  const filter: any = activeOnly ? { isActive: true } : {};
+  return InsuranceCompany.find(filter).sort({ name: 1 }).lean();
+}
+
+export async function createInsuranceCompany(data: any) {
+  const company = new InsuranceCompany({
+    name:     data.name,
+    isActive: data.isActive !== false,
+  });
+  await company.save();
+  return company;
+}
+
+export async function updateInsuranceCompany(id: string, data: any) {
+  const allowed = ["name", "isActive"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  return InsuranceCompany.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteInsuranceCompany(id: string) {
+  return InsuranceCompany.findByIdAndDelete(id).lean();
+}
+
+// ─── TPAs ─────────────────────────────────────────────────────────────────────
+
+export async function getTpas(activeOnly = true) {
+  const filter: any = activeOnly ? { isActive: true } : {};
+  return Tpa.find(filter).sort({ name: 1 }).lean();
+}
+
+export async function createTpa(data: any) {
+  const tpa = new Tpa({
+    name:     data.name,
+    isActive: data.isActive !== false,
+  });
+  await tpa.save();
+  return tpa;
+}
+
+export async function updateTpa(id: string, data: any) {
+  const allowed = ["name", "isActive"];
+  const update: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  return Tpa.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+}
+
+export async function deleteTpa(id: string) {
+  return Tpa.findByIdAndDelete(id).lean();
 }
 
 // ─── Investigation Items (Catalogue) ─────────────────────────────────────────

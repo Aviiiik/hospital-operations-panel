@@ -9,6 +9,20 @@ export interface InvestigationVendor {
   isActive: boolean;
 }
 
+// ─── Insurance Company / TPA types ────────────────────────────────────────────
+
+export interface InsuranceCompany {
+  _id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface Tpa {
+  _id: string;
+  name: string;
+  isActive: boolean;
+}
+
 // ─── Investigation Item (catalogue) types ─────────────────────────────────────
 
 export interface InvestigationItem {
@@ -228,6 +242,18 @@ const ipdService = {
   createVendor:  (data: any)   => api.post("/ipd/vendors", data),
   updateVendor:  (id: string, data: any) => api.put(`/ipd/vendors/${id}`, data),
   deleteVendor:  (id: string)  => api.delete(`/ipd/vendors/${id}`),
+
+  // Insurance Companies
+  getInsuranceCompanies:    (all = false) => api.get("/ipd/insurance-companies", { params: all ? { all: "1" } : {} }),
+  createInsuranceCompany:   (data: any)   => api.post("/ipd/insurance-companies", data),
+  updateInsuranceCompany:   (id: string, data: any) => api.put(`/ipd/insurance-companies/${id}`, data),
+  deleteInsuranceCompany:   (id: string)  => api.delete(`/ipd/insurance-companies/${id}`),
+
+  // TPAs
+  getTpas:    (all = false) => api.get("/ipd/tpas", { params: all ? { all: "1" } : {} }),
+  createTpa:  (data: any)   => api.post("/ipd/tpas", data),
+  updateTpa:  (id: string, data: any) => api.put(`/ipd/tpas/${id}`, data),
+  deleteTpa:  (id: string)  => api.delete(`/ipd/tpas/${id}`),
 
   // Investigation Items (catalogue)
   getInvestigationItems:    (vendorCode?: string, all = false) =>
