@@ -10,6 +10,7 @@ import { Search, BookOpen, Eye, Pencil, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import opdService from "@/services/opdService";
 import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
+import ExportExcelButton from "@/components/ExportExcelButton";
 import EditPatientModal from "@/components/opd/EditPatientModal";
 import EditBookingModal from "@/components/opd/EditBookingModal";
 import { useAuth } from "@/contexts/AuthContext";
@@ -310,11 +311,25 @@ export default function RegisteredPatient() {
       {/* Results */}
       {searched && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm text-gray-600">
               {patients.length > 0 ? `${patients.length} patient(s) found` : "No patients found"}
               {loading && <span className="ml-2 text-gray-400 font-normal">Loading...</span>}
             </CardTitle>
+            <ExportExcelButton
+              filename="opd-patients"
+              data={patients.map(p => ({
+                "Patient ID":       p.patientId,
+                "Registration No":  p.registrationNo,
+                "Patient Name":     `${p.title} ${p.name}`,
+                "Gender":           p.gender,
+                "Age (Yrs)":        p.ageYears,
+                "Phone":            p.phone,
+                "Registration Type": p.registrationType,
+                "Registration Date": new Date(p.registrationDate).toLocaleDateString("en-IN"),
+                "Valid Till":       p.validity ? new Date(p.validity).toLocaleDateString("en-IN") : "",
+              }))}
+            />
           </CardHeader>
           {patients.length > 0 && (
             <CardContent className="p-0">

@@ -290,6 +290,88 @@ router.delete("/vendors/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Insurance Company routes ─────────────────────────────────────────────────
+
+router.get("/insurance-companies", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const activeOnly = req.query.all !== "1";
+    const companies = await ipdService.getInsuranceCompanies(activeOnly);
+    res.json({ success: true, data: { companies } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/insurance-companies", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const company = await ipdService.createInsuranceCompany(req.body);
+    res.status(201).json({ success: true, data: company });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put("/insurance-companies/:id", requireAdmin, async (req, res) => {
+  try {
+    const company = await ipdService.updateInsuranceCompany(req.params.id, req.body);
+    if (!company) return res.status(404).json({ message: "Insurance company not found" });
+    res.json({ success: true, data: company });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete("/insurance-companies/:id", requireAdmin, async (req, res) => {
+  try {
+    const company = await ipdService.deleteInsuranceCompany(req.params.id);
+    if (!company) return res.status(404).json({ message: "Insurance company not found" });
+    res.json({ success: true, data: company });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── TPA routes ───────────────────────────────────────────────────────────────
+
+router.get("/tpas", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const activeOnly = req.query.all !== "1";
+    const tpas = await ipdService.getTpas(activeOnly);
+    res.json({ success: true, data: { tpas } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/tpas", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const tpa = await ipdService.createTpa(req.body);
+    res.status(201).json({ success: true, data: tpa });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put("/tpas/:id", requireAdmin, async (req, res) => {
+  try {
+    const tpa = await ipdService.updateTpa(req.params.id, req.body);
+    if (!tpa) return res.status(404).json({ message: "TPA not found" });
+    res.json({ success: true, data: tpa });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete("/tpas/:id", requireAdmin, async (req, res) => {
+  try {
+    const tpa = await ipdService.deleteTpa(req.params.id);
+    if (!tpa) return res.status(404).json({ message: "TPA not found" });
+    res.json({ success: true, data: tpa });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ─── Investigation Items routes ───────────────────────────────────────────────
 
 router.get("/investigation-items", requireAdminOrReceptionist, async (req, res) => {

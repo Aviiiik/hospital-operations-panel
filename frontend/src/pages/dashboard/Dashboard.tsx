@@ -244,7 +244,7 @@ export default function Dashboard() {
               <div className="text-3xl font-bold text-emerald-700">
                 {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueToday ?? 0)}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Receipts today + discharged today</p>
+              <p className="text-xs text-gray-500 mt-1">Receipts collected + due at discharge</p>
             </CardContent>
           </Card>
         </div>

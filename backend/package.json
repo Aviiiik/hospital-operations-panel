@@ -13,7 +13,9 @@
     "seed:users": "tsx src/scripts/seeduser.ts",
     "seed:vendors": "tsx src/scripts/seedVendors.ts",
     "seed:medicines": "tsx src/scripts/seedPharmacyMedicines.ts",
-    "seed:investigation-items": "tsx src/scripts/seedInvestigationItems.ts"
+    "seed:investigation-items": "tsx src/scripts/seedInvestigationItems.ts",
+    "seed:insurance-tpa": "tsx src/scripts/seedInsuranceTpa.ts",
+    "update:arogya-vendor": "tsx src/scripts/updateArogyaVendorName.ts"
   },
   "keywords": [],
   "author": "",

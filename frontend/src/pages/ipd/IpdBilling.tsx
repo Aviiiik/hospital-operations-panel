@@ -70,6 +70,7 @@ interface PharmItem {
 interface PharmBill {
   _id: string;
   billNo: string;
+  vendorBillNo?: string;
   billDate: string;
   vendor?: string;
   referredBy?: string;
@@ -153,8 +154,11 @@ function patientInfoBlock(patient: any) {
   <div><div class="info-label">Phone</div><div class="info-val">${patient.phone || "—"}</div></div>
   <div><div class="info-label">Admitted</div><div class="info-val">${fmtDate(patient.admissionDate)} ${patient.admissionTime || ""}</div></div>
   <div><div class="info-label">Discharged</div><div class="info-val">${fmtDate(patient.dischargeDate)} ${patient.dischargeTime || ""}</div></div>
+  ${patient.address ? `<div style="grid-column:1/-1"><div class="info-label">Address</div><div class="info-val">${patient.address}</div></div>` : ""}
   <div style="grid-column:1/-1"><div class="info-label">Under Doctor</div><div class="info-val">${doctors}</div></div>
   ${patient.patientCategory ? `<div><div class="info-label">Patient Category</div><div class="info-val">${patient.patientCategory}</div></div>` : ""}
+  ${patient.insuranceCo ? `<div><div class="info-label">Insurance Company</div><div class="info-val">${patient.insuranceCo}</div></div>` : ""}
+  ${patient.tpa ? `<div><div class="info-label">TPA</div><div class="info-val">${patient.tpa}</div></div>` : ""}
 </div>`;
 }
 
@@ -253,7 +257,7 @@ function buildDetailedBillHtml(
   const pharmRows = pharmBills.flatMap(bill =>
     bill.items.map(it => `
     <tr>
-      <td style="font-family:monospace;font-size:10px">${bill.billNo}</td>
+      <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
       <td>${fmtDate(bill.billDate)}</td>
       <td>${it.itemName}</td>
       <td>${it.package || "—"}</td>
@@ -447,7 +451,7 @@ ${pharmTotal > 0 ? `
     ${pharmBills.flatMap((bill: any) =>
       bill.items.map((it: any) => `
       <tr>
-        <td style="font-family:monospace;font-size:10px">${bill.billNo}</td>
+        <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
         <td>${fmtDate(bill.billDate)}</td>
         <td>${it.itemName}</td>
         <td>${it.package || "—"}</td>
@@ -984,7 +988,7 @@ export default function IpdBilling() {
                 {pharmBills.map(bill => (
                   <div key={bill._id} className="border-t first:border-t-0">
                     <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 text-xs text-gray-500">
-                      <span className="font-mono font-semibold text-gray-700">{bill.billNo}</span>
+                      <span className="font-mono font-semibold text-gray-700">{bill.vendorBillNo || "—"}</span>
                       <span>{fmtDate(bill.billDate)}</span>
                       {bill.vendor && <span>{bill.vendor}</span>}
                       {bill.referredBy && <span>Ref: {bill.referredBy}</span>}
@@ -1283,7 +1287,7 @@ export default function IpdBilling() {
                     {pharmBills.flatMap(bill =>
                       bill.items.map((it, i) => (
                         <tr key={`${bill._id}-${i}`} className="border-t">
-                          <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{bill.billNo}</td>
+                          <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{bill.vendorBillNo || "—"}</td>
                           <td className="px-3 py-1.5 text-xs text-gray-500">{fmtDate(bill.billDate)}</td>
                           <td className="px-3 py-1.5 font-medium">{it.itemName}</td>
                           <td className="px-3 py-1.5 text-gray-500">{it.package || "—"}</td>

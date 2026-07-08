@@ -268,6 +268,7 @@ export default function IpdPharmacy() {
   const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
   const handleSave = async () => {
+    if (!vendorBillNo.trim()) return toast.error("Bill No is required");
     if (items.some(it => !it.itemName.trim())) return toast.error("All items need a medicine name");
     if (!(await confirm({
       title: editBillId ? "Update pharmacy bill?" : "Save pharmacy bill?",
@@ -414,7 +415,7 @@ export default function IpdPharmacy() {
                 <Input value={vendor} onChange={e => setVendor(e.target.value)} className="h-9 text-sm" placeholder="Pharmacy name" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Vendor Bill No</Label>
+                <Label className="text-xs">Bill No <span className="text-red-500">*</span></Label>
                 <Input value={vendorBillNo} onChange={e => setVendorBillNo(e.target.value)} className="h-9 text-sm" placeholder="Bill / invoice no" />
               </div>
             </div>
@@ -555,7 +556,7 @@ export default function IpdPharmacy() {
                 >
                   <div className="flex items-center gap-4">
                     <div>
-                      <span className="font-mono text-sm font-semibold">{bill.billNo}</span>
+                      <span className="font-mono text-sm font-semibold">{bill.vendorBillNo || "—"}</span>
                       <span className="text-xs text-gray-400 ml-2">{fmtDate(bill.billDate)}</span>
                     </div>
                     {bill.vendor && <Badge variant="outline" className="text-xs">{bill.vendor}</Badge>}
@@ -609,9 +610,6 @@ export default function IpdPharmacy() {
                         ))}
                       </tbody>
                     </table>
-                    {bill.vendorBillNo && (
-                      <p className="px-4 py-1.5 text-xs text-gray-400">Vendor Bill No: {bill.vendorBillNo}</p>
-                    )}
                   </div>
                 )}
               </div>

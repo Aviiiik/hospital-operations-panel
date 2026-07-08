@@ -11,6 +11,7 @@ import { Search, Pencil, RefreshCw, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 import ipdService, { BED_CATEGORIES } from "@/services/ipdService";
 import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 interface IpdPatient {
   _id: string;
@@ -291,10 +292,27 @@ export default function IpdSearchPatient() {
       {/* Results */}
       {searched && (
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
             <CardTitle className="text-base">
               Results <span className="text-gray-400 font-normal text-sm">({patients.length})</span>
             </CardTitle>
+            <ExportExcelButton
+              filename="ipd-patients"
+              data={patients.map(p => ({
+                "Admission ID":   p.admissionId,
+                "Patient Name":   `${p.title} ${p.name}`,
+                "Gender":         p.gender,
+                "Age (Yrs)":      p.ageYears,
+                "Phone":          p.phone,
+                "Department":     p.department || "",
+                "Bed Category":   p.bedCategory || "",
+                "Bed No":         p.bedNo || "",
+                "Doctor(s)":      p.doctors?.length ? p.doctors.map(d => d.doctorName).join(", ") : "",
+                "Admission Date": new Date(p.admissionDate).toLocaleDateString("en-IN"),
+                "Discharge Date": p.dischargeDate ? new Date(p.dischargeDate).toLocaleDateString("en-IN") : "",
+                "Status":         p.status,
+              }))}
+            />
           </CardHeader>
           <CardContent className="p-0">
             {patients.length === 0 ? (
