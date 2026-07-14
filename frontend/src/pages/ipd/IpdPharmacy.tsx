@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService from "@/services/ipdService";
@@ -188,6 +188,11 @@ export default function IpdPharmacy() {
   const [showForm,  setShowForm]  = useState(false);
   const [editBillId, setEditBillId] = useState<string | null>(null);
 
+  // Pharmacy return modal (patient-level, not tied to a specific bill)
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnAmount, setReturnAmount] = useState("");
+  const [savingReturn, setSavingReturn] = useState(false);
+
   // New bill form
   const [billDate,     setBillDate]     = useState(todayStr());
   const [referredBy,   setReferredBy]   = useState("");
@@ -313,6 +318,29 @@ export default function IpdPharmacy() {
     } catch { toast.error("Failed to delete"); }
   };
 
+  const handleReturnSubmit = async () => {
+    const amount = parseFloat(returnAmount) || 0;
+    if (amount <= 0) return toast.error("Enter a valid return amount");
+    if (!(await confirm({
+      title: "Record pharmacy return?",
+      description: `${fmt(amount)} will be deducted from this patient's total pharmacy charge.`,
+      confirmText: "Yes, deduct",
+    }))) return;
+    setSavingReturn(true);
+    try {
+      const newReturn = (patient?.pharmacyReturn || 0) + amount;
+      await ipdService.updatePatient(id!, { pharmacyReturn: newReturn });
+      setPatient((p: any) => ({ ...p, pharmacyReturn: newReturn }));
+      setShowReturnModal(false);
+      setReturnAmount("");
+      toast.success("Pharmacy return recorded");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to record return");
+    } finally {
+      setSavingReturn(false);
+    }
+  };
+
   const handleSaveMedicine = async () => {
     if (!medForm.termName.trim()) return toast.error("Medicine name is required");
     setSavingMed(true);
@@ -329,7 +357,9 @@ export default function IpdPharmacy() {
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
   if (!patient) return <div className="flex items-center justify-center h-64 text-red-500">Patient not found</div>;
 
-  const totalPharmCharge = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  const grossPharmCharge = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  const pharmacyReturn   = patient.pharmacyReturn || 0;
+  const totalPharmCharge = Math.max(0, grossPharmCharge - pharmacyReturn);
 
   const billItems = items;
   const formTotal = billItems.reduce((s, it) => s + it.totalAmount, 0);
@@ -350,6 +380,10 @@ export default function IpdPharmacy() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+            onClick={() => { setReturnAmount(""); setShowReturnModal(true); }}>
+            <RotateCcw className="h-4 w-4" /> Pharmacy Return
+          </Button>
           <Button variant="outline" className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
             onClick={() => setShowMedModal(true)}>
             <Plus className="h-4 w-4" /> Add Medicine to Catalog
@@ -385,6 +419,9 @@ export default function IpdPharmacy() {
             <div>
               <span className="text-xs text-gray-500 block">Total Pharmacy Charge</span>
               <span className="font-bold text-green-700">{fmt(totalPharmCharge)}</span>
+              {pharmacyReturn > 0 && (
+                <span className="text-xs text-red-500 block">(-) Pharmacy Return: {fmt(pharmacyReturn)}</span>
+              )}
             </div>
           </div>
         </CardContent>
@@ -623,7 +660,12 @@ export default function IpdPharmacy() {
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-3 pb-3 flex items-center justify-between">
             <span className="font-semibold text-green-800">Total Pharmacy Charge ({bills.length} bill{bills.length !== 1 ? "s" : ""})</span>
-            <span className="text-2xl font-bold text-green-700">{fmt(totalPharmCharge)}</span>
+            <div className="text-right">
+              <span className="text-2xl font-bold text-green-700 block">{fmt(totalPharmCharge)}</span>
+              {pharmacyReturn > 0 && (
+                <span className="text-xs text-red-500 block">(-) Pharmacy Return: {fmt(pharmacyReturn)}</span>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -700,6 +742,34 @@ export default function IpdPharmacy() {
             <Button variant="outline" onClick={() => setShowMedModal(false)}>Cancel</Button>
             <Button onClick={handleSaveMedicine} disabled={savingMed} className="bg-purple-600 hover:bg-purple-700">
               {savingMed ? "Saving…" : "Add Medicine"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pharmacy Return Modal */}
+      <Dialog open={showReturnModal} onOpenChange={open => { if (!open) { setShowReturnModal(false); setReturnAmount(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-amber-500" /> Pharmacy Return
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 py-2">
+            <Label className="text-xs">Amount (₹) <span className="text-red-500">*</span></Label>
+            <Input
+              type="number"
+              autoFocus
+              value={returnAmount}
+              onChange={e => setReturnAmount(e.target.value)}
+              className="h-9 text-sm"
+              placeholder="0.00"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowReturnModal(false); setReturnAmount(""); }}>Cancel</Button>
+            <Button onClick={handleReturnSubmit} disabled={savingReturn} className="bg-amber-600 hover:bg-amber-700">
+              {savingReturn ? "Saving…" : "Deduct from Bill"}
             </Button>
           </DialogFooter>
         </DialogContent>

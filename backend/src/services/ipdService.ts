@@ -737,8 +737,11 @@ export async function deletePharmacyBill(id: string) {
 
 export async function getPharmacyTotal(patientId: string) {
   const bills = await IpdPharmacyBill.find({ patientId }).lean() as any[];
-  const total = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
-  return { total, count: bills.length };
+  const patient = await IpdPatient.findById(patientId).lean() as any;
+  const grossTotal = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  const pharmacyReturn = patient?.pharmacyReturn || 0;
+  const total = Math.max(0, grossTotal - pharmacyReturn);
+  return { total, grossTotal, pharmacyReturn, count: bills.length };
 }
 
 // ─── Pharmacy Medicine Catalog ────────────────────────────────────────────────
