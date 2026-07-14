@@ -83,6 +83,9 @@ const ipdPatientSchema = new mongoose.Schema({
   billDiscount:     { type: Number, default: null },
   billDiscountType: { type: String, enum: ["flat", "percent"], default: "flat" },
 
+  // Cumulative pharmacy return amount (deducted from total pharmacy charge)
+  pharmacyReturn: { type: Number, default: 0 },
+
   // Manual estimate end date for open allotments (synced across all pages)
   estimateEndDate: { type: Date, default: null },
   estimateEndTime: { type: String, default: null },

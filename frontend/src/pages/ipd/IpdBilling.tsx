@@ -212,6 +212,7 @@ function buildDetailedBillHtml(
   servicesNet: number,
   invTotal: number,
   pharmTotal: number,
+  pharmacyReturn: number,
   billDiscAmt: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
@@ -329,6 +330,9 @@ ${pharmBills.length > 0 ? `
   <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
   <tbody>
     ${pharmRows}
+    ${pharmacyReturn > 0 ? `
+    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td></tr>
+    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td></tr>` : ""}
     <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
   </tbody>
 </table>` : ""}
@@ -349,6 +353,7 @@ function buildSummaryBillHtml(
   servicesNet: number,
   invTotal: number,
   pharmTotal: number,
+  pharmacyReturn: number,
   billDiscAmt: number,
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
@@ -443,7 +448,7 @@ ${invTotal > 0 ? `
   </tbody>
 </table>` : ""}
 
-${pharmTotal > 0 ? `
+${(pharmTotal > 0 || pharmacyReturn > 0) ? `
 <h2>Pharmacy</h2>
 <table>
   <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
@@ -461,6 +466,9 @@ ${pharmTotal > 0 ? `
         <td class="right bold">${fmt(it.netAmount)}</td>
       </tr>`)
     ).join("")}
+    ${pharmacyReturn > 0 ? `
+    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td></tr>
+    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td></tr>` : ""}
     <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
   </tbody>
 </table>` : ""}
@@ -563,7 +571,9 @@ export default function IpdBilling() {
   const servicesDiscount = entries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
   const invTotal         = investigations.reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const pharmTotal       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  const pharmGross       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
+  const pharmacyReturn   = patient.pharmacyReturn || 0;
+  const pharmTotal       = Math.max(0, pharmGross - pharmacyReturn);
 
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
   const fallbackRate = patient.bedCategory ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
@@ -663,7 +673,7 @@ export default function IpdBilling() {
         billLabel, patient, entries, investigations, bedAllotments, pharmBills,
         fallbackBed, fallbackEndDate,
         totalBedCharge, servicesDiscount, servicesGross, servicesNet,
-        invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
+        invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
       ),
     );
 
@@ -674,7 +684,7 @@ export default function IpdBilling() {
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
         totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
-        servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, billDiscAmt, grandTotal, receiptSummary, logoUrl,
+        servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         investigations, pharmBills,
       ),
     );
@@ -1020,6 +1030,12 @@ export default function IpdBilling() {
                     </table>
                   </div>
                 ))}
+                {pharmacyReturn > 0 && (
+                  <div className="flex justify-between items-center px-4 py-1 border-t bg-gray-50 text-sm">
+                    <span className="text-red-500">(-) Pharmacy Return</span>
+                    <span className="font-medium text-red-500">{fmt(pharmacyReturn)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center px-4 py-2 border-t bg-gray-50">
                   <span className="text-sm font-medium text-gray-700">Total Pharmacy Charge</span>
                   <span className="font-bold text-green-700">{fmt(pharmTotal)}</span>
@@ -1050,10 +1066,16 @@ export default function IpdBilling() {
                       <span className="font-medium">{fmt(invTotal)}</span>
                     </div>
                   )}
-                  {pharmTotal > 0 && (
+                  {(pharmTotal > 0 || pharmacyReturn > 0) && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Pharmacy</span>
-                      <span className="font-medium">{fmt(pharmTotal)}</span>
+                      <span className="font-medium">{fmt(pharmGross)}</span>
+                    </div>
+                  )}
+                  {pharmacyReturn > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-red-500">(-) Pharmacy Return</span>
+                      <span className="font-medium text-red-500">{fmt(pharmacyReturn)}</span>
                     </div>
                   )}
                   <div className="flex justify-between border-t pt-1.5">
@@ -1297,6 +1319,18 @@ export default function IpdBilling() {
                           <td className="px-3 py-1.5 text-right font-medium text-green-700">{fmt(it.netAmount)}</td>
                         </tr>
                       ))
+                    )}
+                    {pharmacyReturn > 0 && (
+                      <>
+                        <tr className="border-t bg-gray-50">
+                          <td colSpan={7} className="px-3 py-2">Pharmacy Sub Total</td>
+                          <td className="px-3 py-2 text-right">{fmt(pharmGross)}</td>
+                        </tr>
+                        <tr className="border-t bg-gray-50">
+                          <td colSpan={7} className="px-3 py-2 text-red-500">(-) Pharmacy Return</td>
+                          <td className="px-3 py-2 text-right text-red-500">{fmt(pharmacyReturn)}</td>
+                        </tr>
+                      </>
                     )}
                     <tr className="border-t-2 bg-gray-50 font-semibold">
                       <td colSpan={7} className="px-3 py-2">Pharmacy Total</td>
