@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Search, Pencil, RefreshCw, IndianRupee } from "lucide-react";
+import { Search, Pencil, RefreshCw, IndianRupee, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import ipdService, { BED_CATEGORIES } from "@/services/ipdService";
 import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
@@ -56,6 +57,10 @@ export default function IpdSearchPatient() {
   const [occupiedBeds, setOccupiedBeds]   = useState<OccupiedBed[]>([]);
   const [loadingBeds, setLoadingBeds]     = useState(false);
   const [hoveredBed, setHoveredBed]       = useState<OccupiedBed | null>(null);
+
+  // Delete patient
+  const [deleteTarget, setDeleteTarget] = useState<IpdPatient | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const filterAvailableBeds = BED_CATEGORIES.find(c => c.category === filterBedCategory)?.beds ?? [];
   const occupiedSet = new Set(occupiedBeds.map(b => `${b.bedCategory}|${b.bedNo}`));
@@ -140,6 +145,21 @@ export default function IpdSearchPatient() {
 
   const s = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setSearch(prev => ({ ...prev, [field]: e.target.value }));
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await ipdService.deletePatient(deleteTarget._id);
+      setPatients(prev => prev.filter(p => p._id !== deleteTarget._id));
+      toast.success("Patient deleted successfully");
+      setDeleteTarget(null);
+    } catch {
+      toast.error("Failed to delete patient");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -386,6 +406,14 @@ export default function IpdSearchPatient() {
                                 <IndianRupee className="h-4 w-4" />
                               </Button>
                             )}
+                            {isAdmin && (
+                              <Button size="sm" variant="ghost"
+                                className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => setDeleteTarget(p)}
+                                title="Delete">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -397,6 +425,31 @@ export default function IpdSearchPatient() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Patient confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Patient</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete{" "}
+            <span className="font-semibold">{deleteTarget?.title} {deleteTarget?.name}</span>{" "}
+            <span className="font-mono text-xs text-gray-400">({deleteTarget?.admissionId})</span>?
+            <br />
+            This will also delete all associated investigations, billing entries, bed allotments, receipts and pharmacy bills. This action cannot be undone.
+          </p>
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700" onClick={handleDeleteConfirm} disabled={deleting}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              {deleting ? "Deleting..." : "Delete Patient"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
