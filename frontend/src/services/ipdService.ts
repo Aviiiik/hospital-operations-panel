@@ -222,6 +222,7 @@ const ipdService = {
   searchPatients: (params: any)=> api.get("/ipd/patients", { params }),
   getPatient:     (id: string) => api.get(`/ipd/patients/${id}`),
   updatePatient:  (id: string, data: any) => api.put(`/ipd/patients/${id}`, data),
+  deletePatient:  (id: string) => api.delete(`/ipd/patients/${id}`),
   getOccupiedBeds: ()          => api.get("/ipd/beds/occupied"),
 
   // Investigations

@@ -45,6 +45,17 @@ export async function getNextAdmissionPreview(): Promise<{ admissionId: string }
   return { admissionId };
 }
 
+export async function deleteIpdPatient(id: string) {
+  const patient = await IpdPatient.findByIdAndDelete(id);
+  if (!patient) throw new Error("Patient not found");
+  await IpdInvestigation.deleteMany({ ipdPatientId: patient._id });
+  await IpdBillingEntry.deleteMany({ patientId: patient._id });
+  await IpdBedAllotment.deleteMany({ patientId: patient._id });
+  await IpdReceipt.deleteMany({ patientId: patient._id });
+  await IpdPharmacyBill.deleteMany({ patientId: patient._id });
+  return patient;
+}
+
 // ─── Patient CRUD ─────────────────────────────────────────────────────────────
 
 export async function createIpdPatient(data: any) {

@@ -103,6 +103,17 @@ router.put("/patients/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// Delete patient (and associated investigations/billing/bed allotments/receipts/pharmacy bills)
+router.delete("/patients/:id", requireAdmin, async (req, res) => {
+  try {
+    const patient = await ipdService.deleteIpdPatient(req.params.id);
+    res.json({ success: true, data: patient });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 500;
+    res.status(status).json({ message: err.message });
+  }
+});
+
 // ─── Investigation routes ─────────────────────────────────────────────────────
 
 router.get("/investigations/patient/:patientId", requireAdminOrReceptionist, async (req, res) => {
