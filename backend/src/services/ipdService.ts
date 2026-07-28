@@ -187,6 +187,8 @@ export async function updateInvestigation(id: string, data: any) {
     safeData.items = safeData.items.map((it: any, i: number) => ({
       ...it, slNo: i + 1,
       netAmount: it.netAmount ?? it.amount ?? 0,
+      gst: Number(it.gst) || 0,
+      gstType: it.gstType === "flat" ? "flat" : "percent",
     }));
     safeData.totalAmount = safeData.items.reduce((s: number, it: any) => s + Number(it.netAmount || 0), 0);
   }
@@ -276,6 +278,9 @@ export async function updateBillingEntry(id: string, data: any) {
   updateData.discount     = discount;
   updateData.discountType = discountType;
   updateData.totalCharge  = grossAmount - discountAmt;
+
+  if (data.gst !== undefined) updateData.gst = Number(data.gst) || 0;
+  if (data.gstType !== undefined) updateData.gstType = data.gstType === "flat" ? "flat" : "percent";
 
   return IpdBillingEntry.findByIdAndUpdate(id, { $set: updateData }, { new: true }).lean();
 }
@@ -572,11 +577,13 @@ export async function createBedAllotment(patientId: string, data: any) {
 export async function updateBedAllotment(id: string, data: any) {
   const allowed = ["bedCategory", "bedNo", "charge", "allotmentDate", "allotmentTime",
     "endDate", "endTime", "effectiveTime", "effectiveEndTime",
-    "packageDays", "includeInPackage", "cashService", "isCurrent"];
+    "packageDays", "includeInPackage", "cashService", "isCurrent", "gst", "gstType"];
   const update: any = {};
   allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
   if (update.allotmentDate) update.allotmentDate = new Date(update.allotmentDate);
   if (update.endDate)       update.endDate       = new Date(update.endDate);
+  if (update.gst !== undefined) update.gst = Number(update.gst) || 0;
+  if (update.gstType !== undefined) update.gstType = update.gstType === "flat" ? "flat" : "percent";
   return IpdBedAllotment.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
 }
 
@@ -734,7 +741,10 @@ export async function updatePharmacyBill(id: string, data: any) {
       const discType = it.discountType === "₹" ? "₹" : "%";
       const total    = qty * mrp;
       const net      = discType === "₹" ? Math.max(0, total - disc) : total - (total * disc / 100);
-      return { ...it, qty, mrp, discount: disc, discountType: discType, totalAmount: total, netAmount: Math.max(0, net) };
+      return {
+        ...it, qty, mrp, discount: disc, discountType: discType, totalAmount: total, netAmount: Math.max(0, net),
+        gst: Number(it.gst) || 0, gstType: it.gstType === "flat" ? "flat" : "percent",
+      };
     });
     update.totalAmount = update.items.reduce((s: number, i: any) => s + i.totalAmount, 0);
     update.netAmount   = update.items.reduce((s: number, i: any) => s + i.netAmount,   0);

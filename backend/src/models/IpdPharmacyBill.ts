@@ -13,6 +13,8 @@ const pharmacyItemSchema = new mongoose.Schema({
   discount:     { type: Number, default: 0 },
   discountType: { type: String, default: "%" },
   netAmount:    { type: Number, default: 0 },
+  gst:          { type: Number, default: 0 },
+  gstType:      { type: String, enum: ["percent", "flat"], default: "percent" },
 }, { _id: false });
 
 const ipdPharmacyBillSchema = new mongoose.Schema({

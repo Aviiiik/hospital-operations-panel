@@ -27,6 +27,11 @@ function fmtDateShort(d: string | Date | undefined) {
   const dt = new Date(d);
   return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}/${dt.getFullYear()}`;
 }
+function gstAmt(base: number, gst?: number, gstType?: string): number {
+  const g = Number(gst) || 0;
+  if (g <= 0) return 0;
+  return gstType === "flat" ? g : (base * g) / 100;
+}
 
 // ── Amount in words ───────────────────────────────────────────────────────────
 function toWords(n: number): string {
@@ -186,6 +191,10 @@ interface ChargeData {
   servicesNet: number;
   invTotal: number;
   pharmTotal: number;
+  billDiscAmt: number;
+  totalGst: number;
+  gstBreakdown: { label: string; amount: number }[];
+  grandTotal: number;
 }
 
 // ── Consolidated money receipt print (all receipts) ───────────────────────────
@@ -199,7 +208,7 @@ function printAllReceipts(
   const totalReceived = receipts.reduce((s, r) => s + (r.receiptAmount || 0), 0);
   const totalTds      = receipts.reduce((s, r) => s + (r.tds        || 0), 0);
   const totalDis      = receipts.reduce((s, r) => s + (r.disallowed || 0), 0);
-  const grandTotal    = charges.bedTotal + charges.servicesNet + charges.invTotal + charges.pharmTotal;
+  const grandTotal    = charges.grandTotal;
   const netDue        = Math.max(0, grandTotal - totalReceived - totalTds - totalDis);
 
   const now = new Date();
@@ -225,6 +234,12 @@ function printAllReceipts(
       ? `<tr><td>Investigations</td><td class="right">${fmtAmt(charges.invTotal)}</td></tr>` : "",
     charges.pharmTotal > 0
       ? `<tr><td>Pharmacy</td><td class="right">${fmtAmt(charges.pharmTotal)}</td></tr>` : "",
+    charges.billDiscAmt > 0
+      ? `<tr><td style="color:#c00">(-) Bill Discount</td><td class="right" style="color:#c00">(${fmtAmt(charges.billDiscAmt)})</td></tr>` : "",
+    charges.totalGst > 0
+      ? `<tr><td>(+) GST</td><td class="right">${fmtAmt(charges.totalGst)}</td></tr>` : "",
+    charges.totalGst > 0
+      ? `<tr><td colspan="2" style="font-size:9px;color:#6b7280;border-top:none">${charges.gstBreakdown.map(x => `${x.label}: ${fmtAmt(x.amount)}`).join(" &middot; ")}</td></tr>` : "",
     `<tr style="font-weight:bold;background:#f3f4f6"><td>Total Bill Amount</td><td class="right">${fmtAmt(grandTotal)}</td></tr>`,
   ].filter(Boolean).join("");
 
@@ -304,9 +319,10 @@ export default function IpdReceipt() {
   const [patient,       setPatient]       = useState<any>(null);
   const [receipts,      setReceipts]      = useState<ReceiptEntry[]>([]);
   const [billSummary,   setBillSummary]   = useState<{ gross: number; discount: number; net: number; count: number } | null>(null);
+  const [entries,       setEntries]       = useState<any[]>([]);
   const [bedAllotments, setBedAllotments] = useState<any[]>([]);
-  const [invTotal,      setInvTotal]      = useState(0);
-  const [pharmTotal,    setPharmTotal]    = useState(0);
+  const [investigations,setInvestigations]= useState<any[]>([]);
+  const [pharmBills,    setPharmBills]    = useState<any[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [showForm,      setShowForm]      = useState(false);
@@ -324,17 +340,18 @@ export default function IpdReceipt() {
       ipdService.getPatient(id),
       ipdService.getReceipts(id),
       ipdService.getBillingSummary(id),
+      ipdService.getBillingEntries(id),
       ipdService.getBedAllotments(id),
       ipdService.getInvestigations(id),
-      ipdService.getPharmacyTotal(id),
-    ]).then(([pr, rr, br, asr, invR, phR]) => {
+      ipdService.getPharmacyBills(id),
+    ]).then(([pr, rr, br, entR, asr, invR, phR]) => {
       setPatient(pr.data.data);
       setReceipts(rr.data.data.receipts || []);
       setBillSummary(br.data.data);
+      setEntries(entR.data.data.entries || []);
       setBedAllotments(asr.data.data.allotments || []);
-      const investigations: any[] = invR.data.data.investigations || [];
-      setInvTotal(investigations.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0));
-      setPharmTotal(phR.data.data?.total ?? 0);
+      setInvestigations(invR.data.data.investigations || []);
+      setPharmBills(phR.data.data.bills || []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -345,7 +362,6 @@ export default function IpdReceipt() {
   const totalTds        = receipts.reduce((s, r) => s + (r.tds        || 0), 0);
   const totalDisallowed = receipts.reduce((s, r) => s + (r.disallowed || 0), 0);
   const totalRefund     = receipts.reduce((s, r) => s + (r.refund     || 0), 0);
-  const servicesNet     = billSummary?.net      ?? 0;
   const servicesGross   = billSummary?.gross    ?? 0;
   const servicesDis     = billSummary?.discount ?? 0;
 
@@ -372,8 +388,37 @@ export default function IpdReceipt() {
         return rate * days;
       })();
 
-  const bedTotal   = patient?.bedChargeOverride != null ? patient.bedChargeOverride : computedBedTotal;
-  const grandTotal = bedTotal + servicesNet + invTotal + pharmTotal;
+  const bedTotal      = patient?.bedChargeOverride != null ? patient.bedChargeOverride : computedBedTotal;
+  const invTotal      = investigations.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0);
+  const pharmGross     = pharmBills.reduce((s: number, b: any) => s + (b.netAmount || 0), 0);
+  const pharmacyReturn = patient?.pharmacyReturn || 0;
+  const pharmTotal      = Math.max(0, pharmGross - pharmacyReturn);
+
+  // GST — mirrors IpdBilling.tsx so both pages always agree
+  const bedGstItems = bedAllotments.map((a: any) => {
+    const days = a.endDate && a.allotmentDate
+      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
+      : (a.allotmentDate ? computeBillingDays(new Date(a.allotmentDate), openEndDate) : 1);
+    return { label: `Bed — ${a.bedCategory} (${a.bedNo})`, amount: gstAmt(days * (a.charge || 0), a.gst, a.gstType) };
+  }).filter((x: any) => x.amount > 0);
+  const svcGstItems = entries
+    .map((e: any) => ({ label: e.serviceName, amount: gstAmt(e.totalCharge, e.gst, e.gstType) }))
+    .filter((x: any) => x.amount > 0);
+  const invGstItems = investigations
+    .flatMap((inv: any) => (inv.items || []).map((it: any) => ({ label: it.description, amount: gstAmt(it.netAmount || 0, it.gst, it.gstType) })))
+    .filter((x: any) => x.amount > 0);
+  const pharmGstItems = pharmBills
+    .flatMap((b: any) => b.items.map((it: any) => ({ label: it.itemName, amount: gstAmt(it.netAmount, it.gst, it.gstType) })))
+    .filter((x: any) => x.amount > 0);
+  const gstBreakdown = [...bedGstItems, ...svcGstItems, ...invGstItems, ...pharmGstItems];
+  const totalGst     = gstBreakdown.reduce((s, x) => s + x.amount, 0);
+
+  const totalCharge  = bedTotal + servicesGross + invTotal + pharmTotal;
+  const preDiscTotal = totalCharge - servicesDis;
+  const billDiscAmt  = patient?.billDiscount != null
+    ? (patient.billDiscountType === "percent" ? preDiscTotal * patient.billDiscount / 100 : patient.billDiscount)
+    : 0;
+  const grandTotal = preDiscTotal - billDiscAmt + totalGst;
   const due        = Math.max(0, grandTotal - totalReceived - totalTds - totalDisallowed);
 
   const isNonCash = !["CASH"].includes(form.receiptMode);
@@ -442,6 +487,10 @@ export default function IpdReceipt() {
                 servicesNet:      billSummary?.net      ?? 0,
                 invTotal:         invTotal,
                 pharmTotal:       pharmTotal,
+                billDiscAmt,
+                totalGst,
+                gstBreakdown,
+                grandTotal,
               }, logoUrl)}
             >
               <Printer className="h-4 w-4" /> Print Money Receipt
@@ -764,6 +813,28 @@ export default function IpdReceipt() {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pharmacy</span>
                   <span className="font-medium">{fmt(pharmTotal)}</span>
+                </div>
+              )}
+              {billDiscAmt > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>(-) Bill Discount</span>
+                  <span className="font-medium">{fmt(billDiscAmt)}</span>
+                </div>
+              )}
+              {totalGst > 0 && (
+                <div className="border rounded-md bg-emerald-50 border-emerald-200 px-3 py-2 space-y-1">
+                  <div className="flex justify-between text-emerald-700 font-medium">
+                    <span>(+) GST</span>
+                    <span>{fmt(totalGst)}</span>
+                  </div>
+                  <div className="text-xs text-emerald-700/80 space-y-0.5">
+                    {gstBreakdown.map((x, i) => (
+                      <div key={i} className="flex justify-between gap-2">
+                        <span className="truncate">{x.label}</span>
+                        <span className="shrink-0">{fmt(x.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="flex justify-between border-t pt-1.5 mt-1">
