@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ArrowLeft, Printer, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -23,6 +24,8 @@ interface BillingEntry {
   totalCharge: number;
   date: string;
   doctorName?: string;
+  gst?: number;
+  gstType?: "percent" | "flat";
 }
 
 interface InvLineItem {
@@ -33,6 +36,8 @@ interface InvLineItem {
   netAmount: number;
   category: string;
   remark: string;
+  gst?: number;
+  gstType?: "percent" | "flat";
 }
 
 interface Investigation {
@@ -55,6 +60,8 @@ interface BedAllotment {
   endDate?: string;
   endTime?: string;
   isCurrent?: boolean;
+  gst?: number;
+  gstType?: "percent" | "flat";
 }
 
 interface PharmItem {
@@ -65,6 +72,8 @@ interface PharmItem {
   discount: string | number;
   discountType?: "%" | "₹";
   netAmount: number;
+  gst?: number;
+  gstType?: "percent" | "flat";
 }
 
 interface PharmBill {
@@ -92,6 +101,18 @@ function fmt(n: number) {
 function fmtDate(d: string | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function gstAmt(base: number, gst?: number, gstType?: string): number {
+  const g = Number(gst) || 0;
+  if (g <= 0) return 0;
+  return gstType === "flat" ? g : (base * g) / 100;
+}
+
+function gstLabel(gst?: number, gstType?: string): string {
+  const g = Number(gst) || 0;
+  if (g <= 0) return "";
+  return gstType === "flat" ? fmt(g) : `${g}%`;
 }
 
 // ── Print styles ──────────────────────────────────────────────────────────────
@@ -166,6 +187,7 @@ function totalsBlock(
   totalBedCharge: number, servicesGross: number, invTotal: number, pharmTotal: number,
   servicesDiscount: number, billDiscAmt: number, grandTotal: number,
   receiptSummary: ReceiptSummary | null,
+  totalGst: number = 0, gstBreakdown: { label: string; amount: number }[] = [],
 ) {
   const totalPaid  = receiptSummary?.totalReceived ?? 0;
   const totalTds   = receiptSummary?.totalTds ?? 0;
@@ -184,6 +206,11 @@ function totalsBlock(
     <div class="totals-sep"></div>
     <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(preDisc)}</span></div>
     ${billDiscAmt > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Bill Discount</span><span>${fmt(billDiscAmt)}</span></div>` : ""}
+    ${totalGst > 0 ? `
+    <div class="totals-row"><span>(+) GST</span><span class="bold">${fmt(totalGst)}</span></div>
+    <div style="font-size:9px;color:#6b7280;line-height:1.5;padding:0 0 4px 8px">
+      ${gstBreakdown.map(x => `${x.label}: ${fmt(x.amount)}`).join(" &middot; ")}
+    </div>` : ""}
     <div class="totals-row"><span>Grand Total</span><span class="bold">${fmt(grandTotal)}</span></div>
     <div class="totals-row"><span>Total Paid Amount</span><span>${fmt(totalPaid)}</span></div>
     ${totalTds > 0 ? `<div class="totals-row"><span>TDS</span><span>${fmt(totalTds)}</span></div>` : ""}
@@ -217,11 +244,18 @@ function buildDetailedBillHtml(
   grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   logo: string,
+  totalGst: number = 0,
+  gstBreakdown: { label: string; amount: number }[] = [],
 ) {
+  let bedGstTotal = 0, svcGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
+
   const bedRows = bedAllotments.map(a => {
     const days = a.endDate && a.allotmentDate
       ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
       : (a.allotmentDate && estEndDate ? computeBillingDays(new Date(a.allotmentDate), estEndDate) : 1);
+    const charge = days * a.charge;
+    const g = gstAmt(charge, a.gst, a.gstType);
+    bedGstTotal += g;
     return `<tr>
       <td>${fmtDate(a.allotmentDate)} ${a.allotmentTime || ""}</td>
       <td>${a.endDate ? fmtDate(a.endDate) + " " + (a.endTime || "") : "—"}</td>
@@ -229,11 +263,15 @@ function buildDetailedBillHtml(
       <td class="center">${a.bedNo}</td>
       <td class="right">${fmt(a.charge)}</td>
       <td class="center">${days}</td>
-      <td class="right bold">${fmt(days * a.charge)}</td>
+      <td class="right bold">${fmt(charge)}</td>
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
   }).join("");
 
-  const svcRows = entries.map((e, i) => `
+  const svcRows = entries.map((e, i) => {
+    const g = gstAmt(e.totalCharge, e.gst, e.gstType);
+    svcGstTotal += g;
+    return `
     <tr>
       <td>${i + 1}</td>
       <td>${e.serviceName}</td>
@@ -242,21 +280,31 @@ function buildDetailedBillHtml(
       <td class="right">${fmt(e.unitCharge)}</td>
       <td class="right">${(e.unitCharge * e.quantity - e.totalCharge) > 0 ? `<span style="color:#ef4444">${fmt(e.unitCharge * e.quantity - e.totalCharge)}</span>` : "—"}</td>
       <td class="right bold">${fmt(e.totalCharge)}</td>
-    </tr>`).join("");
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+    </tr>`;
+  }).join("");
 
   const invRows = investigations.flatMap(inv =>
-    (inv.items || []).filter(it => it.description).map(it => `
+    (inv.items || []).filter(it => it.description).map(it => {
+      const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
+      invGstTotal += g;
+      return `
     <tr>
       <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
       <td>${fmtDate(inv.reqDate)}</td>
       <td>${it.description}</td>
       <td>${it.category || "—"}</td>
       <td class="right bold">${fmt(it.netAmount || 0)}</td>
-    </tr>`)
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+    </tr>`;
+    })
   ).join("");
 
   const pharmRows = pharmBills.flatMap(bill =>
-    bill.items.map(it => `
+    bill.items.map(it => {
+      const g = gstAmt(it.netAmount, it.gst, it.gstType);
+      pharmGstTotal += g;
+      return `
     <tr>
       <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
       <td>${fmtDate(bill.billDate)}</td>
@@ -266,7 +314,9 @@ function buildDetailedBillHtml(
       <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
       <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
       <td class="right bold">${fmt(it.netAmount)}</td>
-    </tr>`)
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+    </tr>`;
+    })
   ).join("");
 
   const fallbackBedRow = !bedAllotments.length && fallbackBed ? `
@@ -278,6 +328,7 @@ function buildDetailedBillHtml(
       <td class="right">${fmt(fallbackBed.rate)}</td>
       <td class="center">${fallbackBed.days}</td>
       <td class="right bold">${fmt(fallbackBed.charge)}</td>
+      <td class="right">—</td>
     </tr>` : "";
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
@@ -294,22 +345,23 @@ ${patientInfoBlock(patient)}
 ${showBedSection ? `
 <h2>Bed Details</h2>
 <table>
-  <thead><tr><th>From Date</th><th>To Date</th><th>Bed Category</th><th class="center">Bed No</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th></tr></thead>
+  <thead><tr><th>From Date</th><th>To Date</th><th>Bed Category</th><th class="center">Bed No</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${bedRows || fallbackBedRow}
-    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td></tr>
+    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
 <h2>Services (Nursing Home Charges)</h2>
 <table>
-  <thead><tr><th>#</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th><th class="right">Discount</th><th class="right">Amount</th></tr></thead>
+  <thead><tr><th>#</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th><th class="right">Discount</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${svcRows}
     <tr class="total-row">
       <td colspan="5">Nursing Home Charges</td>
       <td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>
       <td class="right">${fmt(servicesNet)}</td>
+      <td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td>
     </tr>
   </tbody>
 </table>
@@ -317,27 +369,27 @@ ${showBedSection ? `
 ${investigations.length > 0 ? `
 <h2>Investigations</h2>
 <table>
-  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${invRows}
-    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td></tr>
+    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
 ${pharmBills.length > 0 ? `
 <h2>Pharmacy</h2>
 <table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${pharmRows}
     ${pharmacyReturn > 0 ? `
-    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td></tr>
-    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td></tr>` : ""}
-    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
+    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr>
+    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
+    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}`;
 }
 
 function buildSummaryBillHtml(
@@ -360,12 +412,19 @@ function buildSummaryBillHtml(
   logo: string,
   investigations: Investigation[],
   pharmBills: PharmBill[],
+  totalGst: number = 0,
+  gstBreakdown: { label: string; amount: number }[] = [],
 ) {
+  let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
+
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
         const days = a.endDate && a.allotmentDate
           ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
           : (a.allotmentDate && estEndDate ? computeBillingDays(new Date(a.allotmentDate), estEndDate) : 1);
+        const charge = days * a.charge;
+        const g = gstAmt(charge, a.gst, a.gstType);
+        bedGstTotal += g;
         return `<tr>
           <td>${a.bedCategory}</td>
           <td>${a.bedNo}</td>
@@ -373,7 +432,8 @@ function buildSummaryBillHtml(
           <td>${a.endDate ? fmtDate(a.endDate) : "—"}</td>
           <td class="right">${fmt(a.charge)}</td>
           <td class="center">${days}</td>
-          <td class="right bold">${fmt(days * a.charge)}</td>
+          <td class="right bold">${fmt(charge)}</td>
+          <td class="right">${g > 0 ? fmt(g) : "—"}</td>
         </tr>`;
       }).join("")
     : (fallbackBed && fallbackBed.charge > 0 ? `<tr>
@@ -384,6 +444,7 @@ function buildSummaryBillHtml(
         <td class="right">${fmt(fallbackBed.rate)}</td>
         <td class="center">${fallbackBed.days}</td>
         <td class="right bold">${fmt(fallbackBed.charge)}</td>
+        <td class="right">—</td>
       </tr>` : "");
 
   const svcGroupRows = Object.entries(serviceGroups).map(([grp, data]) => `
@@ -408,10 +469,10 @@ ${patientInfoBlock(patient)}
 ${showBedSection ? `
 <h2>Bed Details</h2>
 <table>
-  <thead><tr><th>Bed Category</th><th>Bed No</th><th>From</th><th>To</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th></tr></thead>
+  <thead><tr><th>Bed Category</th><th>Bed No</th><th>From</th><th>To</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${bedSummaryRows}
-    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td></tr>
+    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
@@ -432,29 +493,37 @@ ${showBedSection ? `
 ${invTotal > 0 ? `
 <h2>Investigations</h2>
 <table>
-  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${investigations.flatMap(inv =>
-      (inv.items || []).filter((it: any) => it.description).map((it: any) => `
+      (inv.items || []).filter((it: any) => it.description).map((it: any) => {
+        const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
+        invGstTotal += g;
+        return `
       <tr>
         <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
         <td>${fmtDate(inv.reqDate)}</td>
         <td>${it.description}</td>
         <td>${it.category || "—"}</td>
         <td class="right bold">${fmt(it.netAmount || 0)}</td>
-      </tr>`)
+        <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+      </tr>`;
+      })
     ).join("")}
-    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td></tr>
+    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
 ${(pharmTotal > 0 || pharmacyReturn > 0) ? `
 <h2>Pharmacy</h2>
 <table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
+  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
   <tbody>
     ${pharmBills.flatMap((bill: any) =>
-      bill.items.map((it: any) => `
+      bill.items.map((it: any) => {
+        const g = gstAmt(it.netAmount, it.gst, it.gstType);
+        pharmGstTotal += g;
+        return `
       <tr>
         <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
         <td>${fmtDate(bill.billDate)}</td>
@@ -464,16 +533,46 @@ ${(pharmTotal > 0 || pharmacyReturn > 0) ? `
         <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
         <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
         <td class="right bold">${fmt(it.netAmount)}</td>
-      </tr>`)
+        <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+      </tr>`;
+      })
     ).join("")}
     ${pharmacyReturn > 0 ? `
-    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td></tr>
-    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td></tr>` : ""}
-    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td></tr>
+    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr>
+    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
+    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}`;
+}
+
+function GstBadge({ gst, gstType, onClick }: { gst?: number; gstType?: string; onClick: () => void }) {
+  const has = Number(gst) > 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-xs rounded px-1.5 py-0.5 border whitespace-nowrap transition-colors ${
+        has
+          ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+      }`}
+    >
+      {has ? `GST ${gstLabel(gst, gstType)}` : "+ GST"}
+    </button>
+  );
+}
+
+type GstKind = "entry" | "bed" | "inv" | "pharm";
+interface GstEditState {
+  kind: GstKind;
+  id: string;
+  itemIndex?: number;
+  label: string;
+  base: number;
+  gst: number;
+  gstType: "percent" | "flat";
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -500,6 +599,10 @@ export default function IpdBilling() {
   });
   const [estManual,  setEstManual]  = useState(false);
   const [estSaving,  setEstSaving]  = useState(false);
+  const [gstEdit,    setGstEdit]    = useState<GstEditState | null>(null);
+  const [gstInput,   setGstInput]   = useState("");
+  const [gstTypeInput, setGstTypeInput] = useState<"percent" | "flat">("percent");
+  const [savingGst,  setSavingGst]  = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -598,12 +701,37 @@ export default function IpdBilling() {
       }, 0)
     : (fallbackBed?.charge ?? 0);
 
+  // GST — applied per item, summed on top of the grand total
+  const bedGstItems = bedAllotments.map(a => {
+    const days = !a.allotmentDate ? 1
+      : a.endDate
+        ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
+        : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+    return { label: `Bed — ${a.bedCategory} (${a.bedNo})`, amount: gstAmt(days * (a.charge || 0), a.gst, a.gstType) };
+  }).filter(x => x.amount > 0);
+  const svcGstItems = entries
+    .map(e => ({ label: e.serviceName, amount: gstAmt(e.totalCharge, e.gst, e.gstType) }))
+    .filter(x => x.amount > 0);
+  const invGstItems = investigations
+    .flatMap(inv => (inv.items || []).map(it => ({ label: it.description, amount: gstAmt(it.netAmount || 0, it.gst, it.gstType) })))
+    .filter(x => x.amount > 0);
+  const pharmGstItems = pharmBills
+    .flatMap(b => b.items.map(it => ({ label: it.itemName, amount: gstAmt(it.netAmount, it.gst, it.gstType) })))
+    .filter(x => x.amount > 0);
+
+  const bedGstTotal   = bedGstItems.reduce((s, x) => s + x.amount, 0);
+  const svcGstTotal   = svcGstItems.reduce((s, x) => s + x.amount, 0);
+  const invGstTotal   = invGstItems.reduce((s, x) => s + x.amount, 0);
+  const pharmGstTotal = pharmGstItems.reduce((s, x) => s + x.amount, 0);
+  const gstBreakdown  = [...bedGstItems, ...svcGstItems, ...invGstItems, ...pharmGstItems];
+  const totalGst      = bedGstTotal + svcGstTotal + invGstTotal + pharmGstTotal;
+
   const totalCharge    = totalBedCharge + servicesGross + invTotal + pharmTotal;
   const preDiscTotal   = totalCharge - servicesDiscount;
   const billDiscAmt    = billDiscSaved != null
     ? (billDiscType === "percent" ? preDiscTotal * billDiscSaved / 100 : billDiscSaved)
     : 0;
-  const grandTotal     = preDiscTotal - billDiscAmt;
+  const grandTotal     = preDiscTotal - billDiscAmt + totalGst;
   const totalPaid      = receiptSummary?.totalReceived    ?? 0;
   const totalTds       = receiptSummary?.totalTds         ?? 0;
   const totalDis       = receiptSummary?.totalDisallowed  ?? 0;
@@ -666,6 +794,50 @@ export default function IpdBilling() {
     finally { setEstSaving(false); }
   };
 
+  const openGstEdit = (state: GstEditState) => {
+    setGstEdit(state);
+    setGstInput(state.gst > 0 ? String(state.gst) : "");
+    setGstTypeInput(state.gstType || "percent");
+  };
+
+  const applyGst = async (val: number, type: "percent" | "flat") => {
+    if (!gstEdit) return;
+    setSavingGst(true);
+    try {
+      if (gstEdit.kind === "entry") {
+        await ipdService.updateBillingEntry(gstEdit.id, { gst: val, gstType: type });
+        setEntries(prev => prev.map(e => e._id === gstEdit.id ? { ...e, gst: val, gstType: type } : e));
+      } else if (gstEdit.kind === "bed") {
+        await ipdService.updateBedAllotment(gstEdit.id, { gst: val, gstType: type });
+        setBedAllotments(prev => prev.map(a => a._id === gstEdit.id ? { ...a, gst: val, gstType: type } : a));
+      } else if (gstEdit.kind === "inv") {
+        const inv = investigations.find(i => i._id === gstEdit.id);
+        if (!inv) return;
+        const items = inv.items.map((it, i) => i === gstEdit.itemIndex ? { ...it, gst: val, gstType: type } : it);
+        await ipdService.updateInvestigation(gstEdit.id, { items });
+        setInvestigations(prev => prev.map(i => i._id === gstEdit.id ? { ...i, items } : i));
+      } else if (gstEdit.kind === "pharm") {
+        const bill = pharmBills.find(b => b._id === gstEdit.id);
+        if (!bill) return;
+        const items = bill.items.map((it, i) => i === gstEdit.itemIndex ? { ...it, gst: val, gstType: type } : it);
+        await ipdService.updatePharmacyBill(gstEdit.id, { items });
+        setPharmBills(prev => prev.map(b => b._id === gstEdit.id ? { ...b, items } : b));
+      }
+      setGstEdit(null);
+      toast.success(val > 0 ? "GST saved" : "GST removed");
+    } catch { toast.error("Failed to save GST"); }
+    finally { setSavingGst(false); }
+  };
+
+  const handleSaveGst = () => {
+    const val = Number(gstInput);
+    if (isNaN(val) || val < 0) return toast.error("Enter a valid GST value");
+    if (gstTypeInput === "percent" && val > 100) return toast.error("Percentage cannot exceed 100");
+    applyGst(val, gstTypeInput);
+  };
+
+  const handleClearGst = () => applyGst(0, gstTypeInput);
+
   const handlePrintDetailed = () =>
     openPrintWindow(
       `${billLabel} — ${patient.admissionId}`,
@@ -674,6 +846,7 @@ export default function IpdBilling() {
         fallbackBed, fallbackEndDate,
         totalBedCharge, servicesDiscount, servicesGross, servicesNet,
         invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
+        totalGst, gstBreakdown,
       ),
     );
 
@@ -685,7 +858,7 @@ export default function IpdBilling() {
         totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
         servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
-        investigations, pharmBills,
+        investigations, pharmBills, totalGst, gstBreakdown,
       ),
     );
 
@@ -868,6 +1041,7 @@ export default function IpdBilling() {
                       <th className="text-right px-4 py-2 font-medium">Rate/Day</th>
                       <th className="text-center px-4 py-2 font-medium">Days</th>
                       <th className="text-right px-4 py-2 font-medium">Charge</th>
+                      <th className="text-right px-4 py-2 font-medium">GST</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -876,6 +1050,7 @@ export default function IpdBilling() {
                         : a.endDate
                           ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
                           : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+                      const bedCharge = days * a.charge;
                       return (
                         <tr key={a._id} className="border-t">
                           <td className="px-4 py-2">
@@ -891,7 +1066,13 @@ export default function IpdBilling() {
                           </td>
                           <td className="px-4 py-2 text-right text-gray-600">{fmt(a.charge)}</td>
                           <td className="px-4 py-2 text-center font-semibold">{days}</td>
-                          <td className="px-4 py-2 text-right font-semibold text-indigo-700">{fmt(days * a.charge)}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-indigo-700">{fmt(bedCharge)}</td>
+                          <td className="px-4 py-2 text-right">
+                            <GstBadge gst={a.gst} gstType={a.gstType} onClick={() => openGstEdit({
+                              kind: "bed", id: a._id, label: `Bed — ${a.bedCategory} (${a.bedNo})`,
+                              base: bedCharge, gst: a.gst || 0, gstType: a.gstType || "percent",
+                            })} />
+                          </td>
                         </tr>
                       );
                     })}
@@ -963,6 +1144,7 @@ export default function IpdBilling() {
                             <th className="px-4 py-1 text-left font-medium">Category</th>
                             <th className="px-4 py-1 text-right font-medium">Lab Amt</th>
                             <th className="px-4 py-1 text-right font-medium">Net Amt</th>
+                            <th className="px-4 py-1 text-right font-medium">GST</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -973,6 +1155,12 @@ export default function IpdBilling() {
                               <td className="px-4 py-1.5 text-gray-500">{it.category || "—"}</td>
                               <td className="px-4 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
                               <td className="px-4 py-1.5 text-right font-semibold text-purple-700">{fmt(it.netAmount || 0)}</td>
+                              <td className="px-4 py-1.5 text-right">
+                                <GstBadge gst={it.gst} gstType={it.gstType} onClick={() => openGstEdit({
+                                  kind: "inv", id: inv._id, itemIndex: i, label: it.description,
+                                  base: it.netAmount || 0, gst: it.gst || 0, gstType: it.gstType || "percent",
+                                })} />
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1013,6 +1201,7 @@ export default function IpdBilling() {
                           <th className="px-4 py-1 text-right font-medium">MRP</th>
                           <th className="px-4 py-1 text-center font-medium">Discount</th>
                           <th className="px-4 py-1 text-right font-medium">Net Amt</th>
+                          <th className="px-4 py-1 text-right font-medium">GST</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1024,6 +1213,12 @@ export default function IpdBilling() {
                             <td className="px-4 py-1.5 text-right">{fmt(parseFloat(String(it.mrp)) || 0)}</td>
                             <td className="px-4 py-1.5 text-center">{it.discount || 0}{it.discountType || "%"}</td>
                             <td className="px-4 py-1.5 text-right font-semibold text-green-700">{fmt(it.netAmount)}</td>
+                            <td className="px-4 py-1.5 text-right">
+                              <GstBadge gst={it.gst} gstType={it.gstType} onClick={() => openGstEdit({
+                                kind: "pharm", id: bill._id, itemIndex: i, label: it.itemName,
+                                base: it.netAmount || 0, gst: it.gst || 0, gstType: it.gstType || "percent",
+                              })} />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1150,6 +1345,23 @@ export default function IpdBilling() {
                     )}
                   </div>
 
+                  {totalGst > 0 && (
+                    <div className="border rounded-md bg-emerald-50 border-emerald-200 px-3 py-2 space-y-1">
+                      <div className="flex justify-between text-emerald-700 font-medium">
+                        <span>(+) GST</span>
+                        <span>{fmt(totalGst)}</span>
+                      </div>
+                      <div className="text-xs text-emerald-700/80 space-y-0.5">
+                        {gstBreakdown.map((x, i) => (
+                          <div key={i} className="flex justify-between gap-2">
+                            <span className="truncate">{x.label}</span>
+                            <span className="shrink-0">{fmt(x.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between">
                     <span className="text-gray-600">Actual Bill Amount</span>
                     <span className="font-medium">{fmt(grandTotal)}</span>
@@ -1217,6 +1429,7 @@ export default function IpdBilling() {
                       <th className="text-center px-3 py-2 font-medium">Qty</th>
                       <th className="text-right px-3 py-2 font-medium">Amount</th>
                       <th className="text-right px-3 py-2 font-medium">S.Charge</th>
+                      <th className="text-right px-3 py-2 font-medium">GST</th>
                       <th className="text-left px-3 py-2 font-medium">Remarks</th>
                     </tr>
                   </thead>
@@ -1230,6 +1443,12 @@ export default function IpdBilling() {
                         <td className="px-3 py-1.5 text-center">{e.quantity}</td>
                         <td className="px-3 py-1.5 text-right font-medium">{fmt(e.totalCharge)}</td>
                         <td className="px-3 py-1.5 text-right text-red-500">{(e.unitCharge * e.quantity - e.totalCharge) > 0 ? fmt(e.unitCharge * e.quantity - e.totalCharge) : "—"}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          <GstBadge gst={e.gst} gstType={e.gstType} onClick={() => openGstEdit({
+                            kind: "entry", id: e._id, label: e.serviceName,
+                            base: e.totalCharge, gst: e.gst || 0, gstType: e.gstType || "percent",
+                          })} />
+                        </td>
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{e.doctorName || ""}</td>
                       </tr>
                     ))}
@@ -1238,6 +1457,7 @@ export default function IpdBilling() {
                       <td className="px-3 py-2 text-center">{entries.reduce((s, e) => s + e.quantity, 0)}</td>
                       <td className="px-3 py-2 text-right">{fmt(servicesNet)}</td>
                       <td className="px-3 py-2 text-right text-red-600">{servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700">{svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td>
                       <td></td>
                     </tr>
                   </tbody>
@@ -1261,6 +1481,7 @@ export default function IpdBilling() {
                       <th className="text-left px-3 py-2 font-medium">Category</th>
                       <th className="text-right px-3 py-2 font-medium">Lab Amt</th>
                       <th className="text-right px-3 py-2 font-medium">Net Amt</th>
+                      <th className="text-right px-3 py-2 font-medium">GST</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1273,12 +1494,19 @@ export default function IpdBilling() {
                           <td className="px-3 py-1.5 text-gray-500">{it.category || "—"}</td>
                           <td className="px-3 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
                           <td className="px-3 py-1.5 text-right font-medium text-purple-700">{fmt(it.netAmount || 0)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <GstBadge gst={it.gst} gstType={it.gstType} onClick={() => openGstEdit({
+                              kind: "inv", id: inv._id, itemIndex: i, label: it.description,
+                              base: it.netAmount || 0, gst: it.gst || 0, gstType: it.gstType || "percent",
+                            })} />
+                          </td>
                         </tr>
                       ))
                     )}
                     <tr className="border-t-2 bg-gray-50 font-semibold">
                       <td colSpan={5} className="px-3 py-2">Investigations Total</td>
                       <td className="px-3 py-2 text-right text-purple-700">{fmt(invTotal)}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700">{invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1303,6 +1531,7 @@ export default function IpdBilling() {
                       <th className="text-right px-3 py-2 font-medium">MRP</th>
                       <th className="text-center px-3 py-2 font-medium">Discount</th>
                       <th className="text-right px-3 py-2 font-medium">Net Amt</th>
+                      <th className="text-right px-3 py-2 font-medium">GST</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1317,6 +1546,12 @@ export default function IpdBilling() {
                           <td className="px-3 py-1.5 text-right">{fmt(parseFloat(String(it.mrp)) || 0)}</td>
                           <td className="px-3 py-1.5 text-center">{it.discount || 0}%</td>
                           <td className="px-3 py-1.5 text-right font-medium text-green-700">{fmt(it.netAmount)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <GstBadge gst={it.gst} gstType={it.gstType} onClick={() => openGstEdit({
+                              kind: "pharm", id: bill._id, itemIndex: i, label: it.itemName,
+                              base: it.netAmount || 0, gst: it.gst || 0, gstType: it.gstType || "percent",
+                            })} />
+                          </td>
                         </tr>
                       ))
                     )}
@@ -1325,16 +1560,19 @@ export default function IpdBilling() {
                         <tr className="border-t bg-gray-50">
                           <td colSpan={7} className="px-3 py-2">Pharmacy Sub Total</td>
                           <td className="px-3 py-2 text-right">{fmt(pharmGross)}</td>
+                          <td></td>
                         </tr>
                         <tr className="border-t bg-gray-50">
                           <td colSpan={7} className="px-3 py-2 text-red-500">(-) Pharmacy Return</td>
                           <td className="px-3 py-2 text-right text-red-500">{fmt(pharmacyReturn)}</td>
+                          <td></td>
                         </tr>
                       </>
                     )}
                     <tr className="border-t-2 bg-gray-50 font-semibold">
                       <td colSpan={7} className="px-3 py-2">Pharmacy Total</td>
                       <td className="px-3 py-2 text-right text-green-700">{fmt(pharmTotal)}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700">{pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1345,6 +1583,55 @@ export default function IpdBilling() {
       </Tabs>
 
       <ConfirmDialog />
+
+      <Dialog open={!!gstEdit} onOpenChange={open => { if (!open) setGstEdit(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>GST — {gstEdit?.label}</DialogTitle>
+          </DialogHeader>
+          {gstEdit && (
+            <div className="space-y-3">
+              <div className="text-xs text-gray-500">Base amount: <span className="font-medium text-gray-700">{fmt(gstEdit.base)}</span></div>
+              <div className="flex items-center gap-1.5">
+                <div className="flex rounded-md border overflow-hidden shrink-0">
+                  <button type="button"
+                    onClick={() => setGstTypeInput("percent")}
+                    className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${gstTypeInput === "percent" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                    %
+                  </button>
+                  <button type="button"
+                    onClick={() => setGstTypeInput("flat")}
+                    className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${gstTypeInput === "flat" ? "bg-indigo-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                    ₹
+                  </button>
+                </div>
+                <Input
+                  type="number" min={0} max={gstTypeInput === "percent" ? 100 : undefined}
+                  value={gstInput}
+                  onChange={e => setGstInput(e.target.value)}
+                  placeholder="0"
+                  className="h-8 text-sm"
+                />
+              </div>
+              {gstInput && !isNaN(Number(gstInput)) && Number(gstInput) > 0 && (
+                <div className="text-xs text-gray-500">
+                  GST amount: <span className="font-medium text-emerald-700">{fmt(gstAmt(gstEdit.base, Number(gstInput), gstTypeInput))}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {gstEdit && Number(gstEdit.gst) > 0 && (
+              <Button variant="ghost" className="text-gray-500" onClick={handleClearGst} disabled={savingGst}>
+                Remove GST
+              </Button>
+            )}
+            <Button onClick={handleSaveGst} disabled={savingGst} className="bg-indigo-600 hover:bg-indigo-700">
+              {savingGst ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

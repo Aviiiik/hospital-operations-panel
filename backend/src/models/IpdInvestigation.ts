@@ -10,6 +10,8 @@ const investigationItemSchema = new mongoose.Schema({
   category:    { type: String },
   caseNo:      { type: String },
   netAmount:   { type: Number, default: 0 },
+  gst:         { type: Number, default: 0 },
+  gstType:     { type: String, enum: ["percent", "flat"], default: "percent" },
 }, { _id: false });
 
 const ipdInvestigationSchema = new mongoose.Schema({

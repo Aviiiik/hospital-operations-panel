@@ -14,6 +14,8 @@ const ipdBedAllotmentSchema = new mongoose.Schema({
   effectiveEndTime: { type: String },
   packageDays:      { type: Number, default: 0 },
   includeInPackage: { type: Boolean, default: false },
+  gst:              { type: Number, default: 0 },
+  gstType:          { type: String, enum: ["percent", "flat"], default: "percent" },
   cashService:      { type: Boolean, default: false },
   isCurrent:        { type: Boolean, default: true },
   createdBy:        { type: String },
