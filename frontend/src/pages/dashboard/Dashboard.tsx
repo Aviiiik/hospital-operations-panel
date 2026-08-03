@@ -4,19 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee } from "lucide-react";
 import opdService from "@/services/opdService";
 import ipdService from "@/services/ipdService";
+import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
 
 interface OpdStats {
-  admissions: { today: number; yesterday: number };
-  revenue:    { today: number; yesterday: number };
+  admissions: { current: number; previous: number };
+  revenue:    { current: number; previous: number };
 }
 
 interface IpdStats {
-  currentlyAdmitted: number;
-  admittedToday:     number;
-  dischargedToday:   number;
-  bedsOccupied:      number;
-  revenueToday:      number;
-  recentAdmissions:  RecentAdmission[];
+  currentlyAdmitted:  number;
+  admittedInRange:    number;
+  dischargedInRange:  number;
+  bedsOccupied:       number;
+  revenueInRange:     number;
+  recentAdmissions:   RecentAdmission[];
 }
 
 interface RecentAdmission {
@@ -42,16 +43,16 @@ interface ActivityRow {
   createdAt: string;
 }
 
-function pctChange(today: number, yesterday: number) {
-  if (yesterday === 0) {
-    return today > 0
-      ? { text: "No data yesterday", icon: null, color: "text-gray-500" }
-      : { text: "No activity yet",   icon: null, color: "text-gray-400" };
+function pctChange(current: number, previous: number) {
+  if (previous === 0) {
+    return current > 0
+      ? { text: "No data for previous period", icon: null, color: "text-gray-500" }
+      : { text: "No activity yet",             icon: null, color: "text-gray-400" };
   }
-  const p = Math.round(((today - yesterday) / yesterday) * 100);
-  if (p > 0)  return { text: `${p}% from yesterday`,         icon: "up",   color: "text-green-600" };
-  if (p < 0)  return { text: `${Math.abs(p)}% from yesterday`, icon: "down", color: "text-red-500" };
-  return       { text: "Same as yesterday",                    icon: "flat", color: "text-gray-500" };
+  const p = Math.round(((current - previous) / previous) * 100);
+  if (p > 0)  return { text: `${p}% vs previous period`,         icon: "up",   color: "text-green-600" };
+  if (p < 0)  return { text: `${Math.abs(p)}% vs previous period`, icon: "down", color: "text-red-500" };
+  return       { text: "Same as previous period",                    icon: "flat", color: "text-gray-500" };
 }
 
 function formatRevenue(n: number) { return `₹${n.toLocaleString("en-IN")}`; }
@@ -75,8 +76,14 @@ const IPD_STATUS_STYLE: Record<string, string> = {
   Discharged: "bg-gray-100 text-gray-600",
 };
 
-function TrendBadge({ today, yesterday }: { today: number; yesterday: number }) {
-  const c = pctChange(today, yesterday);
+const PRESET_LABELS: Record<DatePreset, string> = {
+  today: "Today", yesterday: "Yesterday", this_week: "This Week", this_month: "This Month",
+  last_month: "Last Month", last_3_months: "Last 3 Months", last_6_months: "Last 6 Months",
+  custom: "Selected Range",
+};
+
+function TrendBadge({ current, previous }: { current: number; previous: number }) {
+  const c = pctChange(current, previous);
   return (
     <p className={`text-xs mt-1 flex items-center gap-1 ${c.color}`}>
       {c.icon === "up"   && <TrendingUp   className="h-3 w-3" />}
@@ -91,6 +98,13 @@ function TrendBadge({ today, yesterday }: { today: number; yesterday: number }) 
 export default function Dashboard() {
   const navigate = useNavigate();
 
+  const [preset, setPreset] = useState<DatePreset>("today");
+  const initialRange = getDateRange("today");
+  const [range, setRange] = useState<{ from: string; to: string }>({
+    from: initialRange.from.toISOString(),
+    to:   initialRange.to.toISOString(),
+  });
+
   const [opdStats,   setOpdStats]   = useState<OpdStats | null>(null);
   const [ipdStats,   setIpdStats]   = useState<IpdStats | null>(null);
   const [activity,   setActivity]   = useState<ActivityRow[]>([]);
@@ -98,42 +112,47 @@ export default function Dashboard() {
   const [ipdLoading, setIpdLoading] = useState(true);
   const [actLoading, setActLoading] = useState(true);
 
-  useEffect(() => {
-    opdService.getDashboardStats()
+  const handleRangeChange = (p: DatePreset, r: { from: Date; to: Date }) => {
+    setPreset(p);
+    setRange({ from: r.from.toISOString(), to: r.to.toISOString() });
+  };
+
+  const loadAll = (from: string, to: string) => {
+    opdService.getDashboardStats(from, to)
       .then(r => setOpdStats(r.data.data))
       .catch(() => {})
       .finally(() => setOpdLoading(false));
 
-    ipdService.getDashboardStats()
+    ipdService.getDashboardStats(from, to)
       .then(r => setIpdStats(r.data.data))
       .catch(() => {})
       .finally(() => setIpdLoading(false));
 
-    opdService.getTodayActivity()
+    opdService.getTodayActivity(from, to)
       .then(r => setActivity(r.data.data.activity))
       .catch(() => {})
       .finally(() => setActLoading(false));
+  };
 
-    const interval = setInterval(() => {
-      ipdService.getDashboardStats()
-        .then(r => setIpdStats(r.data.data))
-        .catch(() => {});
-      opdService.getDashboardStats()
-        .then(r => setOpdStats(r.data.data))
-        .catch(() => {});
-      opdService.getTodayActivity()
-        .then(r => setActivity(r.data.data.activity))
-        .catch(() => {});
-    }, 60_000);
+  useEffect(() => {
+    loadAll(range.from, range.to);
 
+    const interval = setInterval(() => loadAll(range.from, range.to), 60_000);
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.from, range.to]);
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Hospital Dashboard</h1>
-        <p className="text-gray-500 mt-1">Welcome back! Here's today's overview</p>
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Hospital Dashboard</h1>
+          <p className="text-gray-500 mt-1">Overview for the selected period</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1.5">Period</p>
+          <DatePresetFilter value={preset} onChange={handleRangeChange} />
+        </div>
       </div>
 
       {/* ── OPD Stats ───────────────────────────────────────────────────────────── */}
@@ -142,37 +161,37 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Admissions Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Admissions ({PRESET_LABELS[preset]})</CardTitle>
               <Users className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{opdLoading ? "—" : opdStats?.admissions.today ?? 0}</div>
-              {opdStats && <TrendBadge today={opdStats.admissions.today} yesterday={opdStats.admissions.yesterday} />}
+              <div className="text-3xl font-bold">{opdLoading ? "—" : opdStats?.admissions.current ?? 0}</div>
+              {opdStats && <TrendBadge current={opdStats.admissions.current} previous={opdStats.admissions.previous} />}
               {!opdStats && !opdLoading && <p className="text-xs mt-1 text-gray-400">Could not load</p>}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Admissions Yesterday</CardTitle>
+              <CardTitle className="text-sm font-medium">Previous Period</CardTitle>
               <Calendar className="h-5 w-5 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{opdLoading ? "—" : opdStats?.admissions.yesterday ?? 0}</div>
-              <p className="text-xs text-gray-500 mt-1">Previous day total</p>
+              <div className="text-3xl font-bold">{opdLoading ? "—" : opdStats?.admissions.previous ?? 0}</div>
+              <p className="text-xs text-gray-500 mt-1">Admissions in the preceding equal-length period</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Revenue ({PRESET_LABELS[preset]})</CardTitle>
               <span className="text-emerald-600 font-bold text-lg">₹</span>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{opdLoading ? "—" : formatRevenue(opdStats?.revenue.today ?? 0)}</div>
-              {opdStats && <TrendBadge today={opdStats.revenue.today} yesterday={opdStats.revenue.yesterday} />}
+              <div className="text-3xl font-bold">{opdLoading ? "—" : formatRevenue(opdStats?.revenue.current ?? 0)}</div>
+              {opdStats && <TrendBadge current={opdStats.revenue.current} previous={opdStats.revenue.previous} />}
               {!opdLoading && opdStats && (
-                <p className="text-xs text-gray-400 mt-0.5">Yesterday: {formatRevenue(opdStats.revenue.yesterday)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Previous period: {formatRevenue(opdStats.revenue.previous)}</p>
               )}
             </CardContent>
           </Card>
@@ -192,18 +211,18 @@ export default function Dashboard() {
               <div className="text-3xl font-bold text-green-700">
                 {ipdLoading ? "—" : ipdStats?.currentlyAdmitted ?? 0}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Active patients</p>
+              <p className="text-xs text-gray-500 mt-1">Active patients (live, not period-filtered)</p>
             </CardContent>
           </Card>
 
           <Card className="border-blue-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Admitted Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Admitted ({PRESET_LABELS[preset]})</CardTitle>
               <LogIn className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-blue-700">
-                {ipdLoading ? "—" : ipdStats?.admittedToday ?? 0}
+                {ipdLoading ? "—" : ipdStats?.admittedInRange ?? 0}
               </div>
               <p className="text-xs text-gray-500 mt-1">New admissions</p>
             </CardContent>
@@ -211,14 +230,14 @@ export default function Dashboard() {
 
           <Card className="border-orange-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Discharged Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Discharged ({PRESET_LABELS[preset]})</CardTitle>
               <LogOut className="h-5 w-5 text-orange-500" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-orange-600">
-                {ipdLoading ? "—" : ipdStats?.dischargedToday ?? 0}
+                {ipdLoading ? "—" : ipdStats?.dischargedInRange ?? 0}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Today's discharges</p>
+              <p className="text-xs text-gray-500 mt-1">Discharges in period</p>
             </CardContent>
           </Card>
 
@@ -231,18 +250,18 @@ export default function Dashboard() {
               <div className="text-3xl font-bold text-purple-700">
                 {ipdLoading ? "—" : ipdStats?.bedsOccupied ?? 0}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Assigned beds</p>
+              <p className="text-xs text-gray-500 mt-1">Assigned beds (live, not period-filtered)</p>
             </CardContent>
           </Card>
 
           <Card className="border-emerald-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Revenue ({PRESET_LABELS[preset]})</CardTitle>
               <IndianRupee className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-emerald-700">
-                {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueToday ?? 0)}
+                {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueInRange ?? 0)}
               </div>
               <p className="text-xs text-gray-500 mt-1">Receipts collected + due at discharge</p>
             </CardContent>
@@ -252,7 +271,7 @@ export default function Dashboard() {
         {/* Recent IPD admissions */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent IPD Patients</CardTitle>
+            <CardTitle>IPD Patients Admitted ({PRESET_LABELS[preset]})</CardTitle>
             <button
               onClick={() => navigate("/ipd/search")}
               className="text-xs text-blue-600 hover:underline"
@@ -264,7 +283,7 @@ export default function Dashboard() {
             {ipdLoading ? (
               <p className="text-gray-400 text-center py-8 text-sm">Loading…</p>
             ) : !ipdStats?.recentAdmissions.length ? (
-              <p className="text-gray-500 text-center py-8 text-sm">No IPD patients yet</p>
+              <p className="text-gray-500 text-center py-8 text-sm">No IPD patients admitted in this period</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -308,9 +327,9 @@ export default function Dashboard() {
         </Card>
       </section>
 
-      {/* ── OPD Today's Activity ────────────────────────────────────────────────── */}
+      {/* ── OPD Activity ────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">OPD — Today's Activity</h2>
+        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">OPD — Activity ({PRESET_LABELS[preset]})</h2>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Patient Activity</CardTitle>
@@ -322,7 +341,7 @@ export default function Dashboard() {
             {actLoading ? (
               <p className="text-gray-400 text-center py-12 text-sm">Loading…</p>
             ) : activity.length === 0 ? (
-              <p className="text-gray-500 text-center py-12 text-sm">No bookings recorded today</p>
+              <p className="text-gray-500 text-center py-12 text-sm">No bookings recorded in this period</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

@@ -16,20 +16,22 @@ const requireAdmin = (req: any, res: any, next: any) => {
   }
 };
 
-// GET today's bookings with patient and doctor info
+// GET bookings with patient and doctor info — defaults to today, accepts ?from&to
 router.get("/stats/today-activity", async (req, res) => {
   try {
-    const activity = await opdService.getTodayActivity();
+    const { from, to } = req.query as { from?: string; to?: string };
+    const activity = await opdService.getTodayActivity(from, to);
     res.json({ success: true, data: { activity } });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// GET dashboard stats — OPD admissions and revenue today vs yesterday
+// GET dashboard stats — OPD admissions and revenue for the range vs the preceding equal period
 router.get("/stats/dashboard", async (req, res) => {
   try {
-    const stats = await opdService.getDashboardStats();
+    const { from, to } = req.query as { from?: string; to?: string };
+    const stats = await opdService.getDashboardStats(from, to);
     res.json({ success: true, data: stats });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -219,6 +221,52 @@ router.get("/prescriptions/patient/:patientId", async (req, res) => {
   } catch (err: any) {
     const status = err.message === "Patient not found" ? 404 : 500;
     res.status(status).json({ message: err.message });
+  }
+});
+
+// ─── OPD Services (catalogue) ─────────────────────────────────────────────────
+
+// GET services — active only by default, pass ?all=1 for the full catalogue
+router.get("/services", async (req, res) => {
+  try {
+    const activeOnly = req.query.all !== "1";
+    const services = await opdService.getOpdServices(activeOnly);
+    res.json({ success: true, data: { services } });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Create service — admin or receptionist
+router.post("/services", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const service = await opdService.createOpdService(req.body);
+    res.status(201).json({ success: true, data: service });
+  } catch (err: any) {
+    const status = err.message.includes("already exists") || err.message.includes("required") ? 400 : 500;
+    res.status(status).json({ message: err.message });
+  }
+});
+
+// Update service — admin or receptionist
+router.put("/services/:id", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const service = await opdService.updateOpdService(req.params.id, req.body);
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    res.json({ success: true, data: service });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete service — admin or receptionist
+router.delete("/services/:id", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const service = await opdService.deleteOpdService(req.params.id);
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    res.json({ success: true, data: service });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 });
 

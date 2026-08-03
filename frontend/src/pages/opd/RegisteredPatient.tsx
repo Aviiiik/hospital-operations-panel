@@ -90,12 +90,11 @@ export default function RegisteredPatient() {
   };
 
   // Preset — date filter only; clears text search
-  const handlePresetChange = (p: DatePreset) => {
+  const handlePresetChange = (p: DatePreset, range: { from: Date; to: Date }) => {
     const cleared = { name: "", phone: "", patientId: "", registrationNo: "" };
     setSearch(cleared);
     setPreset(p);
-    const { from, to } = getDateRange(p);
-    fetchPatients({ from: from.toISOString(), to: to.toISOString() });
+    fetchPatients({ from: range.from.toISOString(), to: range.to.toISOString() });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSearch(); };

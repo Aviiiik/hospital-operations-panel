@@ -21,23 +21,13 @@ export const DESIGNATIONS = [
   "PSYCHIATRY", "PULMONOLOGIST", "RADIOLOGIST", "RMO",
   "SENIOR MEDICAL OFFICER", "SKIN SPECIALIST", "SURGEON", "UROLOGIST", "VASCULAR",
 ];
-export const OPD_SERVICES = [
-  { serviceName: "P. ENEMA", charge: 400 },
-  { serviceName: "FINGERING ENEMA", charge: 900 },
-  { serviceName: "IV INJECTION (FOR 30 MIN)", charge: 300 },
-  { serviceName: "INJECTION SHORT", charge: 200 },
-  { serviceName: "IM INJECTION", charge: 100 },
-  { serviceName: "FOLYS CATHETER", charge: 800 },
-  { serviceName: "RYLES'S TUBE", charge: 1000 },
-  { serviceName: "DRESSING BIG", charge: 500 },
-  { serviceName: "DRESSING SMALL", charge: 300 },
-  { serviceName: "IV CHANNEL", charge: 400 },
-  { serviceName: "ECG", charge: 350 },
-  { serviceName: "STICH REMOVAL", charge: 100 }, // Note: per stitch logic can be added in remarks
-  { serviceName: "INSULIN / SUBCUT INJ", charge: 100 },
-  { serviceName: "CATHETER WASH / BLADDER WASH", charge: 400 },
-  { serviceName: "SUCTION", charge: 300 },
-];
+export interface OpdServiceItem {
+  _id: string;
+  serviceName: string;
+  charge: number;
+  isActive: boolean;
+  sortOrder: number;
+}
 
 export const MEDICINES = [
   // Analgesics & Antipyretics
@@ -106,8 +96,8 @@ const opdService = {
   getAllDoctors:      ()          => api.get("/opd/doctors/all"),
   createDoctor:       (data: any) => api.post("/opd/doctors", data),
   updateDoctor:       (id: string, data: any) => api.put(`/opd/doctors/${id}`, data),
-  getDashboardStats:  ()          => api.get("/opd/stats/dashboard"),
-  getTodayActivity:   ()          => api.get("/opd/stats/today-activity"),
+  getDashboardStats:  (from?: string, to?: string) => api.get("/opd/stats/dashboard", { params: { from, to } }),
+  getTodayActivity:   (from?: string, to?: string) => api.get("/opd/stats/today-activity", { params: { from, to } }),
   getNextId:          ()          => api.get("/opd/patients/next-id"),
   createPatient:      (data: any) => api.post("/opd/patients", data),
   updatePatient:      (id: string, data: any) => api.put(`/opd/patients/${id}`, data),
@@ -120,6 +110,10 @@ const opdService = {
   createPrescription:     (data: any)         => api.post("/opd/prescriptions", data),
   getPatientPrescriptions:(patientId: string) => api.get(`/opd/prescriptions/patient/${patientId}`),
   deletePatient:          (id: string)        => api.delete(`/opd/patients/${id}`),
+  getOpdServices:         (all = false)       => api.get("/opd/services", { params: all ? { all: "1" } : {} }),
+  createOpdService:       (data: any)         => api.post("/opd/services", data),
+  updateOpdService:       (id: string, data: any) => api.put(`/opd/services/${id}`, data),
+  deleteOpdService:       (id: string)        => api.delete(`/opd/services/${id}`),
 };
 
 export default opdService;

@@ -36,7 +36,8 @@ const requireAdmin = (req: any, res: any, next: any) => {
 
 router.get("/stats", requireAdminOrReceptionist, async (req, res) => {
   try {
-    const stats = await ipdService.getIpdDashboardStats();
+    const { from, to } = req.query as { from?: string; to?: string };
+    const stats = await ipdService.getIpdDashboardStats(from, to);
     res.json({ success: true, data: stats });
   } catch (err: any) {
     res.status(500).json({ message: err.message });

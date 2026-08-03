@@ -9,7 +9,7 @@ import { Trash2, Plus, Printer, CheckCircle2 } from "lucide-react";
 import logoUrl from "@/assets/logo.png";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
+import opdService, { DEPARTMENTS, OpdServiceItem } from "@/services/opdService";
 
 interface ServiceItem { serviceName: string; charge: number; }
 
@@ -197,6 +197,11 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
         designation: d.specialization || "", fees: Number(d.consultancyFees) || 0,
       })))
     );
+  }, []);
+
+  const [opdServices, setOpdServices] = useState<OpdServiceItem[]>([]);
+  useEffect(() => {
+    opdService.getOpdServices().then(r => setOpdServices(r.data.data.services));
   }, []);
 
   const [department,      setDepartment]      = useState("OPD");
@@ -408,7 +413,7 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
           value={s.serviceName} 
           onValueChange={(val) => {
             // 1. Find the selected service object from your data list
-            const selected = OPD_SERVICES.find(os => os.serviceName === val);
+            const selected = opdServices.find(os => os.serviceName === val);
             
             // 2. Create a copy of the services array
             const updated = [...services];
@@ -428,8 +433,8 @@ export default function BookingForm({ patient, existingBookings, onSaved, isNewR
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="CONSULTATION">CONSULTATION</SelectItem>
-            {OPD_SERVICES.map(os => (
-              <SelectItem key={os.serviceName} value={os.serviceName}>
+            {opdServices.map(os => (
+              <SelectItem key={os._id} value={os.serviceName}>
                 {os.serviceName}
               </SelectItem>
             ))}

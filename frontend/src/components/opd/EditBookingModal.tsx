@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import opdService, { DEPARTMENTS, OPD_SERVICES } from "@/services/opdService";
+import opdService, { DEPARTMENTS, OpdServiceItem } from "@/services/opdService";
 
 interface Doctor { _id: string; name: string; department: string; fees: number; }
 
@@ -28,6 +28,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [opdServices, setOpdServices] = useState<OpdServiceItem[]>([]);
 
   useEffect(() => {
     opdService.getDoctors().then(r =>
@@ -36,6 +37,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
         fees: Number(d.consultancyFees) || 0,
       })))
     );
+    opdService.getOpdServices().then(r => setOpdServices(r.data.data.services));
   }, []);
 
   useEffect(() => {
@@ -171,7 +173,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{idx + 1}</td>
                         <td className="px-3 py-1.5">
                           <Select value={s.serviceName} onValueChange={val => {
-                            const selected = OPD_SERVICES.find(os => os.serviceName === val);
+                            const selected = opdServices.find(os => os.serviceName === val);
                             const updated = services.map((sv, i) => i === idx ? {
                               serviceName: val,
                               charge: selected ? selected.charge : (val === "CONSULTATION" ? (doctors.find(d => d.name === form.doctorName)?.fees || 0) : 0),
@@ -181,7 +183,7 @@ export default function EditBookingModal({ bookingId, open, onOpenChange, onSave
                             <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select Service" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CONSULTATION">CONSULTATION</SelectItem>
-                              {OPD_SERVICES.map(os => <SelectItem key={os.serviceName} value={os.serviceName}>{os.serviceName}</SelectItem>)}
+                              {opdServices.map(os => <SelectItem key={os._id} value={os.serviceName}>{os.serviceName}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>
