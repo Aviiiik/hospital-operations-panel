@@ -216,7 +216,7 @@ export const RECEIPT_MODES = ["CASH", "CHEQUE", "NEFT", "UPI", "CARD", "DD"];
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 const ipdService = {
-  getDashboardStats: ()           => api.get("/ipd/stats"),
+  getDashboardStats: (from?: string, to?: string) => api.get("/ipd/stats", { params: { from, to } }),
   getNextId:      ()           => api.get("/ipd/patients/next-id"),
   createPatient:  (data: any)  => api.post("/ipd/patients", data),
   searchPatients: (params: any)=> api.get("/ipd/patients", { params }),

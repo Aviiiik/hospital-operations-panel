@@ -105,13 +105,12 @@ export default function IpdSearchPatient() {
     doSearch(params);
   };
 
-  const handlePresetChange = (p: DatePreset) => {
+  const handlePresetChange = (p: DatePreset, range: { from: Date; to: Date }) => {
     setSearch({ name: "", phone: "", admissionId: "" });
     setFilterBedCategory("");
     setFilterBedNo("");
     setPreset(p);
-    const { from, to } = getDateRange(p);
-    const params: Record<string, string> = { from: from.toISOString(), to: to.toISOString() };
+    const params: Record<string, string> = { from: range.from.toISOString(), to: range.to.toISOString() };
     if (filterStatus && filterStatus !== "all") params.status = filterStatus;
     doSearch(params);
   };

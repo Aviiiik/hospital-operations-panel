@@ -27,6 +27,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
       { title: "New Patient",        path: "/opd/new-patient",   icon: UserPlus },
       { title: "Registered Patient", path: "/opd/registered",    icon: UserCheck },
       { title: "E-Prescription",    path: "/opd/e-prescription", icon: FileText },
+      { title: "OPD Services",      path: "/opd/services",       icon: FlaskConical },
     ],
   },
   {

@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import OpdPatient from "../models/OpdPatient.js";
 import OpdBooking from "../models/OpdBooking.js";
 import OpdPrescription from "../models/OpdPrescription.js";
+import OpdService from "../models/OpdService.js";
 
 // Returns UTC Date objects bounding the start/end of an IST calendar day.
 // offsetDays=0 → today IST, offsetDays=-1 → yesterday IST, etc.
@@ -117,34 +118,45 @@ export async function searchPatients(query: {
   return OpdPatient.find(filter).sort({ createdAt: -1 }).limit(200);
 }
 
-export async function getTodayActivity() {
-  const { start: todayStart, end: todayEnd } = istDayBounds(0);
-  return OpdBooking.find({ createdAt: { $gte: todayStart, $lte: todayEnd } })
-    .populate("patient", "name patientId phone")
-    .sort({ createdAt: -1 })
-    .limit(100);
+// Resolves an optional from/to query pair to a concrete range, defaulting to
+// today (IST) when either bound is missing.
+function resolveRange(fromQ?: string, toQ?: string): { start: Date; end: Date } {
+  if (fromQ && toQ) return { start: new Date(fromQ), end: new Date(toQ) };
+  return istDayBounds(0);
 }
 
-export async function getDashboardStats() {
-  const { start: todayStart, end: todayEnd } = istDayBounds(0);
-  const { start: yestStart,  end: yestEnd  } = istDayBounds(-1);
+export async function getTodayActivity(fromQ?: string, toQ?: string) {
+  const { start, end } = resolveRange(fromQ, toQ);
+  return OpdBooking.find({ createdAt: { $gte: start, $lte: end } })
+    .populate("patient", "name patientId phone")
+    .sort({ createdAt: -1 })
+    .limit(200);
+}
 
-  const [todayAdmissions, yestAdmissions, todayRevAgg, yestRevAgg] = await Promise.all([
-    OpdBooking.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
-    OpdBooking.countDocuments({ createdAt: { $gte: yestStart,  $lte: yestEnd  } }),
+export async function getDashboardStats(fromQ?: string, toQ?: string) {
+  const { start: rangeStart, end: rangeEnd } = resolveRange(fromQ, toQ);
+
+  // Comparison period: the equal-length window immediately preceding the range.
+  const rangeMs   = rangeEnd.getTime() - rangeStart.getTime();
+  const prevEnd   = new Date(rangeStart.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - rangeMs);
+
+  const [currentAdmissions, previousAdmissions, currentRevAgg, previousRevAgg] = await Promise.all([
+    OpdBooking.countDocuments({ createdAt: { $gte: rangeStart, $lte: rangeEnd } }),
+    OpdBooking.countDocuments({ createdAt: { $gte: prevStart,  $lte: prevEnd  } }),
     OpdBooking.aggregate([
-      { $match: { createdAt: { $gte: todayStart, $lte: todayEnd } } },
+      { $match: { createdAt: { $gte: rangeStart, $lte: rangeEnd } } },
       { $group: { _id: null, total: { $sum: "$billAmount" } } },
     ]),
     OpdBooking.aggregate([
-      { $match: { createdAt: { $gte: yestStart, $lte: yestEnd } } },
+      { $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
       { $group: { _id: null, total: { $sum: "$billAmount" } } },
     ]),
   ]);
 
   return {
-    admissions: { today: todayAdmissions, yesterday: yestAdmissions },
-    revenue:    { today: todayRevAgg[0]?.total || 0, yesterday: yestRevAgg[0]?.total || 0 },
+    admissions: { current: currentAdmissions, previous: previousAdmissions },
+    revenue:    { current: currentRevAgg[0]?.total || 0, previous: previousRevAgg[0]?.total || 0 },
   };
 }
 
@@ -233,4 +245,42 @@ export async function deletePatient(id: string) {
   await OpdBooking.deleteMany({ patient: patient._id });
   await OpdPrescription.deleteMany({ patient: patient._id });
   return patient;
+}
+
+// ─── OPD Services (catalogue) ─────────────────────────────────────────────────
+
+export async function getOpdServices(activeOnly = true) {
+  const filter: any = activeOnly ? { isActive: true } : {};
+  return OpdService.find(filter).sort({ sortOrder: 1, serviceName: 1 }).lean();
+}
+
+export async function createOpdService(data: any) {
+  const serviceName = String(data.serviceName || "").trim().toUpperCase();
+  if (!serviceName) throw new Error("Service name is required");
+
+  const existing = await OpdService.findOne({ serviceName });
+  if (existing) throw new Error("A service with this name already exists");
+
+  return OpdService.create({
+    serviceName,
+    charge:    Number(data.charge) || 0,
+    isActive:  data.isActive !== false,
+    sortOrder: Number(data.sortOrder) || 0,
+  });
+}
+
+export async function updateOpdService(id: string, data: any) {
+  const allowed = ["serviceName", "charge", "isActive", "sortOrder"];
+  const update: any = {};
+  for (const key of allowed) {
+    if (data[key] !== undefined) update[key] = data[key];
+  }
+  if (update.serviceName !== undefined) update.serviceName = String(update.serviceName).trim().toUpperCase();
+  if (update.charge      !== undefined) update.charge      = Number(update.charge) || 0;
+  if (update.sortOrder   !== undefined) update.sortOrder   = Number(update.sortOrder) || 0;
+  return OpdService.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
+}
+
+export async function deleteOpdService(id: string) {
+  return OpdService.findByIdAndDelete(id);
 }

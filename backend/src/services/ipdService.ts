@@ -362,38 +362,42 @@ async function computeNetDueForPatient(patient: any): Promise<number> {
   return Math.max(0, grandTotal - receiptSummary.totalReceived - receiptSummary.totalTds - receiptSummary.totalDisallowed);
 }
 
-export async function getIpdDashboardStats() {
+export async function getIpdDashboardStats(fromQ?: string, toQ?: string) {
   // IST calendar-day boundary, computed independent of the server's local timezone.
   const istDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
-  const todayStartUTC = new Date(`${istDate}T00:00:00+05:30`);
+  const defaultStart = new Date(`${istDate}T00:00:00+05:30`);
+  const defaultEnd   = new Date(`${istDate}T23:59:59.999+05:30`);
+  const rangeStart = fromQ ? new Date(fromQ) : defaultStart;
+  const rangeEnd   = toQ   ? new Date(toQ)   : defaultEnd;
 
-  const [currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentRaw, dischargedTodayPatients, receiptsAgg] =
+  const [currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, recentRaw, dischargedInRangePatients, receiptsAgg] =
     await Promise.all([
+      // Snapshot metrics — always "right now", independent of the selected range.
       IpdPatient.countDocuments({ status: "Admitted" }),
-      IpdPatient.countDocuments({ admissionDate: { $gte: todayStartUTC } }),
-      IpdPatient.countDocuments({ status: "Discharged", dischargeDate: { $gte: todayStartUTC } }),
+      IpdPatient.countDocuments({ admissionDate: { $gte: rangeStart, $lte: rangeEnd } }),
+      IpdPatient.countDocuments({ status: "Discharged", dischargeDate: { $gte: rangeStart, $lte: rangeEnd } }),
       IpdPatient.countDocuments({ status: "Admitted", bedNo: { $exists: true, $ne: "" } }),
-      IpdPatient.find()
+      IpdPatient.find({ admissionDate: { $gte: rangeStart, $lte: rangeEnd } })
         .sort({ createdAt: -1 })
         .limit(8)
         .select("admissionId name title bedNo bedCategory department admissionDate status")
         .lean(),
       IpdPatient.find(
-        { status: "Discharged", dischargeDate: { $gte: todayStartUTC } },
+        { status: "Discharged", dischargeDate: { $gte: rangeStart, $lte: rangeEnd } },
         { _id: 1, billDiscount: 1, billDiscountType: 1 }
       ).lean(),
       IpdReceipt.aggregate([
-        { $match: { receiptDate: { $gte: todayStartUTC } } },
+        { $match: { receiptDate: { $gte: rangeStart, $lte: rangeEnd } } },
         { $group: { _id: null, total: { $sum: "$receiptAmount" } } },
       ]),
     ]);
 
-  // Revenue = receipts collected today + the final due amount left on bills
-  // of patients discharged today (recognised at discharge, even if unpaid).
-  const receiptsCollectedToday = (receiptsAgg[0]?.total as number) ?? 0;
-  const dueAmounts   = await Promise.all(dischargedTodayPatients.map((p: any) => computeNetDueForPatient(p)));
-  const finalDueToday = dueAmounts.reduce((s: number, n: number) => s + n, 0);
-  const revenueToday  = receiptsCollectedToday + finalDueToday;
+  // Revenue = receipts collected in range + the final due amount left on bills
+  // of patients discharged in range (recognised at discharge, even if unpaid).
+  const receiptsCollectedInRange = (receiptsAgg[0]?.total as number) ?? 0;
+  const dueAmounts    = await Promise.all(dischargedInRangePatients.map((p: any) => computeNetDueForPatient(p)));
+  const finalDueInRange = dueAmounts.reduce((s: number, n: number) => s + n, 0);
+  const revenueInRange  = receiptsCollectedInRange + finalDueInRange;
 
   const recentAdmissions = (recentRaw as any[]).map(p => ({
     _id:           String(p._id),
@@ -406,7 +410,7 @@ export async function getIpdDashboardStats() {
     status:        p.status,
   }));
 
-  return { currentlyAdmitted, admittedToday, dischargedToday, bedsOccupied, recentAdmissions, revenueToday };
+  return { currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, recentAdmissions, revenueInRange };
 }
 
 // ─── Investigation Vendors ────────────────────────────────────────────────────
