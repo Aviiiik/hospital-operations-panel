@@ -51,7 +51,7 @@ function SectionArea({
 }
 
 // ── Print discharge certificate (matches PDF exactly) ─────────────────────────
-function printDischargeCertificate(patient: any, form: any, logo: string, medicines: string[] = []) {
+function printDischargeCertificate(patient: any, form: any, logo: string) {
   const w = window.open("", "_blank", "width=900,height=750");
   if (!w) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
 
@@ -184,7 +184,7 @@ ${section("PAST HISTORY:-", form.pastHistory)}
 ${section("INVESTIGATIONS:-", form.investigationSummary)}
 ${section("TREATMENT / OPERATION (DETAILS) :-", form.treatmentDetails)}
 ${section("DISCHARGE STATUS AND ADVICE :-", form.adviceOnDischarge)}
-${medicines.length > 0 ? `<p class="sec-title">MEDICINES DISPENSED :-</p><div class="sec-body">${medicines.join(", ")}</div>` : ""}
+
 
 <div class="footer">
   <div class="sig-row">
@@ -220,7 +220,7 @@ export default function IpdDischarge() {
   const [bedAllotments,   setBedAllotments]  = useState<any[]>([]);
   const [invTotal,        setInvTotal]       = useState(0);
   const [pharmTotal,      setPharmTotal]     = useState(0);
-  const [pharmMedicines,  setPharmMedicines] = useState<string[]>([]);
+ // const [pharmMedicines,  setPharmMedicines] = useState<string[]>([]);
   const [receiptSummary,  setReceiptSummary] = useState<{ totalReceived: number; totalTds: number; totalDisallowed: number } | null>(null);
   const [loading,        setLoading]         = useState(true);
   const [saving,         setSaving]          = useState(false);
@@ -261,8 +261,8 @@ export default function IpdDischarge() {
       setInvTotal(investigations.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0));
       const pharmBills: any[] = phR.data.data.bills || [];
       setPharmTotal(pharmBills.reduce((s: number, b: any) => s + (b.netAmount || 0), 0));
-      const allMeds = pharmBills.flatMap((b: any) => (b.items || []).map((it: any) => it.itemName as string));
-      setPharmMedicines([...new Set(allMeds.filter(Boolean))]);
+     // const allMeds = pharmBills.flatMap((b: any) => (b.items || []).map((it: any) => it.itemName as string));
+      //setPharmMedicines([...new Set(allMeds.filter(Boolean))]);
       setForm(f => ({
         ...f,
         dischargeDate:        p.dischargeDate ? toISTDateStr(p.dischargeDate) : f.dischargeDate,
@@ -314,7 +314,9 @@ export default function IpdDischarge() {
       }
 
       toast.success(markDischarged ? "Patient discharged successfully" : "Discharge note saved");
-      if (markDischarged) navigate("/ipd/search");
+      if (markDischarged) {
+        setPatient((p: any) => (p ? { ...p, ...payload } : p));
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to save");
     } finally {
@@ -390,7 +392,7 @@ export default function IpdDischarge() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => printDischargeCertificate(patient, form, logoUrl, pharmMedicines)}
+            onClick={() => printDischargeCertificate(patient, form, logoUrl)}
             className="gap-2"
           >
             <Printer className="h-4 w-4" /> Print Discharge Certificate
@@ -601,7 +603,7 @@ export default function IpdDischarge() {
       </Card>
 
       {/* Medicines from Pharmacy */}
-      {pharmMedicines.length > 0 && (
+      {/* {pharmMedicines.length > 0 && (
         <Card className="border-green-100 bg-green-50">
           <CardHeader className="pb-2">
             <CardTitle className="text-base text-green-800">Medicines Dispensed (from Pharmacy)</CardTitle>
@@ -617,7 +619,7 @@ export default function IpdDischarge() {
             <p className="text-xs text-gray-500 mt-2">These will appear in the discharge certificate.</p>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Discharge Advice */}
       <Card>

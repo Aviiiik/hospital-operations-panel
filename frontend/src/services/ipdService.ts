@@ -197,7 +197,7 @@ export const DIET_TYPES          = ["General", "Diabetic", "Low Salt", "Liquid",
 export const TREATMENT_CATEGORIES= ["General", "Surgical", "Maternity", "ICU", "Emergency", "Paediatric", "Gynaecology", "Orthopaedic"];
 export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "ESI", "CGHS"];
 export const IPD_DEPARTMENTS     = ["MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
-export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred"];
+export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred","Normal","DORB"];
 
 export const BED_CHARGES: Record<string, number> = {
   "ICCU":                              5000,
