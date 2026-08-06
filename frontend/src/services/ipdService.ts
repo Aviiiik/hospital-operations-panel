@@ -109,6 +109,31 @@ export function computeBillingDays(admissionDate: Date | string, currentDate = n
   return Math.max(1, nowDay - admDay + 1);
 }
 
+// ─── IST-aware "today" / "now" helpers ────────────────────────────────────────
+// `new Date().toISOString()` always returns the UTC calendar day, which lags
+// India by 5.5 hours — between 00:00–05:29 IST it silently returns *yesterday's*
+// date. These helpers force IST regardless of the machine's configured
+// timezone, so "today"/"now" defaults across IPD forms always match the
+// India calendar day/clock.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+export function todayIST(): string {
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function nowISTTime(): string {
+  const ist = new Date(Date.now() + IST_OFFSET_MS);
+  return `${String(ist.getUTCHours()).padStart(2, "0")}:${String(ist.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+// Converts any Date/ISO timestamp to its IST calendar date (YYYY-MM-DD) —
+// use when re-deriving a date-only string from a stored timestamp that may
+// carry a real time-of-day component.
+export function toISTDateStr(d: Date | string): string {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return new Date(dt.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 // ─── Doctor list ──────────────────────────────────────────────────────────────
 
 export const IPD_REFERRAL_DOCTORS = [
@@ -196,8 +221,14 @@ export const BLOOD_GROUPS        = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", 
 export const DIET_TYPES          = ["General", "Diabetic", "Low Salt", "Liquid", "Soft", "NPO"];
 export const TREATMENT_CATEGORIES= ["General", "Surgical", "Maternity", "ICU", "Emergency", "Paediatric", "Gynaecology", "Orthopaedic"];
 export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "ESI", "CGHS"];
-export const IPD_DEPARTMENTS     = ["MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
+export const IPD_DEPARTMENTS     = ["OPD", "IPD", "DAYCARE", "MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
 export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred","Normal","DORB"];
+
+// Departments that never incur bed charges (patient isn't occupying an IPD bed)
+export const BED_CHARGE_EXEMPT_DEPARTMENTS = ["OPD", "DAYCARE"];
+export function isBedChargeExempt(department?: string | null): boolean {
+  return !!department && BED_CHARGE_EXEMPT_DEPARTMENTS.includes(department.toUpperCase());
+}
 
 export const BED_CHARGES: Record<string, number> = {
   "ICCU":                              5000,

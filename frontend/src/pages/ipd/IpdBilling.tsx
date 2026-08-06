@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ArrowLeft, Printer, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CHARGES, computeBillingDays } from "@/services/ipdService";
+import ipdService, { BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr } from "@/services/ipdService";
+import { openIpdPrintWindow, printHeaderHtml, printFooterHtml, doctorServiceBoxHtml } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 interface BillingEntry {
@@ -115,54 +116,6 @@ function gstLabel(gst?: number, gstType?: string): string {
   return gstType === "flat" ? fmt(g) : `${g}%`;
 }
 
-// ── Print styles ──────────────────────────────────────────────────────────────
-const PRINT_CSS = `
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #333; padding: 24px; }
-  h1  { font-size: 22px; font-weight: bold; color: #b91c1c; letter-spacing: 0.03em; }
-  h2  { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-        color: #555; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin: 14px 0 6px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
-  th  { background: #f3f4f6; padding: 5px 8px; text-align: left; border: 1px solid #d1d5db; font-size: 10px; text-transform: uppercase; }
-  td  { padding: 4px 8px; border: 1px solid #e5e7eb; }
-  .right  { text-align: right; }
-  .center { text-align: center; }
-  .bold   { font-weight: bold; }
-  .sub    { color: #6b7280; }
-  .total-row { background: #f9fafb; font-weight: bold; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start;
-            border-bottom: 2px solid #374151; padding-bottom: 12px; margin-bottom: 14px; }
-  .header-right { text-align: right; }
-  .header-right .bill-type { font-size: 20px; font-weight: bold; color: #b91c1c; }
-  .header-right .bill-sub  { font-size: 10px; color: #9ca3af; margin-top: 2px; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px;
-               border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 12px; }
-  .info-label { font-size: 10px; color: #6b7280; }
-  .info-val   { font-weight: 600; font-size: 12px; }
-  .totals-box { display: flex; justify-content: flex-end; margin-top: 8px; }
-  .totals-inner { min-width: 260px; }
-  .totals-row   { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
-  .totals-sep   { border-top: 1px solid #d1d5db; margin: 4px 0; }
-  .totals-grand { display: flex; justify-content: space-between; padding: 6px 0 0;
-                  border-top: 2px solid #111; font-size: 14px; font-weight: bold; margin-top: 4px; }
-  .signatures   { display: flex; justify-content: space-between; margin-top: 40px; }
-  .sig-line     { border-top: 1px solid #9ca3af; padding-top: 4px; width: 150px; text-align: center; font-size: 11px; color: #4b5563; }
-  @media print { body { padding: 12px; } }
-`;
-
-function openPrintWindow(title: string, body: string) {
-  const w = window.open("", "_blank", "width=900,height=700");
-  if (!w) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
-  w.document.write(`<!DOCTYPE html><html><head>
-  <meta charset="utf-8"/>
-  <title>${title}</title>
-  <style>${PRINT_CSS}</style>
-</head><body>${body}
-<script>window.onload=function(){window.focus();window.print();setTimeout(()=>window.close(),500);}<\/script>
-</body></html>`);
-  w.document.close();
-}
-
 function patientInfoBlock(patient: any) {
   const doctors = patient.doctors?.length
     ? patient.doctors.map((d: any) => d.doctorName).join(", ")
@@ -247,7 +200,11 @@ function buildDetailedBillHtml(
   totalGst: number = 0,
   gstBreakdown: { label: string; amount: number }[] = [],
 ) {
-  let bedGstTotal = 0, svcGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
+  let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
+  const svcGstTotal = entries.reduce((s, e) => s + gstAmt(e.totalCharge, e.gst, e.gstType), 0);
+
+  const doctorEntries  = entries.filter(e => e.doctorName);
+  const regularEntries = entries.filter(e => !e.doctorName);
 
   const bedRows = bedAllotments.map(a => {
     const days = a.endDate && a.allotmentDate
@@ -268,9 +225,8 @@ function buildDetailedBillHtml(
     </tr>`;
   }).join("");
 
-  const svcRows = entries.map((e, i) => {
+  const svcRows = regularEntries.map((e, i) => {
     const g = gstAmt(e.totalCharge, e.gst, e.gstType);
-    svcGstTotal += g;
     return `
     <tr>
       <td>${i + 1}</td>
@@ -283,6 +239,8 @@ function buildDetailedBillHtml(
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
   }).join("");
+
+  const doctorBox = doctorServiceBoxHtml(doctorEntries, patient.referredBy, fmt, fmtDate);
 
   const invRows = investigations.flatMap(inv =>
     (inv.items || []).filter(it => it.description).map(it => {
@@ -334,13 +292,8 @@ function buildDetailedBillHtml(
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
   return `
-<div class="header">
-  <img src="${logo}" alt="Logo" style="height:60px;object-fit:contain"/>
-  <div class="header-right">
-    <div class="bill-type">${billType}</div>
-    <div class="bill-sub">Arogya Maternity &amp; Nursing Home</div>
-  </div>
-</div>
+${printHeaderHtml(logo, billType)}
+<div class="print-body">
 ${patientInfoBlock(patient)}
 ${showBedSection ? `
 <h2>Bed Details</h2>
@@ -366,6 +319,8 @@ ${showBedSection ? `
   </tbody>
 </table>
 
+${doctorBox}
+
 ${investigations.length > 0 ? `
 <h2>Investigations</h2>
 <table>
@@ -389,7 +344,9 @@ ${pharmBills.length > 0 ? `
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}
+</div>
+${printFooterHtml()}`;
 }
 
 function buildSummaryBillHtml(
@@ -412,10 +369,12 @@ function buildSummaryBillHtml(
   logo: string,
   investigations: Investigation[],
   pharmBills: PharmBill[],
+  entries: BillingEntry[],
   totalGst: number = 0,
   gstBreakdown: { label: string; amount: number }[] = [],
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
+  const doctorBox = doctorServiceBoxHtml(entries.filter(e => e.doctorName), patient.referredBy, fmt, fmtDate);
 
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
@@ -458,13 +417,8 @@ function buildSummaryBillHtml(
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
   return `
-<div class="header">
-  <img src="${logo}" alt="Logo" style="height:60px;object-fit:contain"/>
-  <div class="header-right">
-    <div class="bill-type">${billType}</div>
-    <div class="bill-sub">Arogya Maternity &amp; Nursing Home</div>
-  </div>
-</div>
+${printHeaderHtml(logo, billType)}
+<div class="print-body">
 ${patientInfoBlock(patient)}
 ${showBedSection ? `
 <h2>Bed Details</h2>
@@ -489,6 +443,8 @@ ${showBedSection ? `
     </tr>
   </tbody>
 </table>
+
+${doctorBox}
 
 ${invTotal > 0 ? `
 <h2>Investigations</h2>
@@ -544,7 +500,9 @@ ${(pharmTotal > 0 || pharmacyReturn > 0) ? `
   </tbody>
 </table>` : ""}
 
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}`;
+${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}
+</div>
+${printFooterHtml()}`;
 }
 
 function GstBadge({ gst, gstType, onClick }: { gst?: number; gstType?: string; onClick: () => void }) {
@@ -592,11 +550,8 @@ export default function IpdBilling() {
   const [billDiscType,     setBillDiscType]     = useState<"flat" | "percent">("flat");
   const [billDiscSaved,    setBillDiscSaved]    = useState<number | null>(null);
   const [savingBillDisc,   setSavingBillDisc]   = useState(false);
-  const [estDate,    setEstDate]    = useState(() => { const n = new Date(); return new Date(n.getTime() + 330 * 60000).toISOString().slice(0, 10); });
-  const [estTime,    setEstTime]    = useState(() => {
-    const n = new Date();
-    return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
-  });
+  const [estDate,    setEstDate]    = useState(() => todayIST());
+  const [estTime,    setEstTime]    = useState(() => nowISTTime());
   const [estManual,  setEstManual]  = useState(false);
   const [estSaving,  setEstSaving]  = useState(false);
   const [gstEdit,    setGstEdit]    = useState<GstEditState | null>(null);
@@ -631,9 +586,7 @@ export default function IpdBilling() {
         }
 
         if (p.estimateEndDate) {
-          const d = new Date(p.estimateEndDate);
-          const ist = new Date(d.getTime() + 330 * 60000); // UTC → IST
-          setEstDate(ist.toISOString().slice(0, 10));
+          setEstDate(toISTDateStr(p.estimateEndDate));
           setEstTime(p.estimateEndTime || "00:00");
           setEstManual(true);
         }
@@ -645,9 +598,8 @@ export default function IpdBilling() {
   useEffect(() => {
     if (estManual) return;
     const t = setInterval(() => {
-      const n = new Date();
-      setEstDate(new Date(n.getTime() + 330 * 60000).toISOString().slice(0, 10));
-      setEstTime(`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`);
+      setEstDate(todayIST());
+      setEstTime(nowISTTime());
     }, 60000);
     return () => clearInterval(t);
   }, [estManual]);
@@ -670,6 +622,7 @@ export default function IpdBilling() {
     return acc;
   }, {});
 
+  const doctorEntries    = entries.filter(e => e.doctorName);
   const servicesGross    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
   const servicesDiscount = entries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
@@ -679,7 +632,7 @@ export default function IpdBilling() {
   const pharmTotal       = Math.max(0, pharmGross - pharmacyReturn);
 
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
-  const fallbackRate = patient.bedCategory ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
+  const fallbackRate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
   const fallbackEndDate = patient.dischargeDate
     ? new Date(patient.dischargeDate)
     : (estDate ? new Date(`${estDate}T${estTime || "00:00"}`) : null);
@@ -786,9 +739,8 @@ export default function IpdBilling() {
       await ipdService.updatePatient(id!, { estimateEndDate: null, estimateEndTime: null });
       setEstManual(false);
       setPatient((p: any) => ({ ...p, estimateEndDate: null, estimateEndTime: null }));
-      const n = new Date();
-      setEstDate(new Date(n.getTime() + 330 * 60000).toISOString().slice(0, 10));
-      setEstTime(`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`);
+      setEstDate(todayIST());
+      setEstTime(nowISTTime());
       toast.success("Reverted to live auto-increment");
     } catch { toast.error("Failed to clear"); }
     finally { setEstSaving(false); }
@@ -839,7 +791,7 @@ export default function IpdBilling() {
   const handleClearGst = () => applyGst(0, gstTypeInput);
 
   const handlePrintDetailed = () =>
-    openPrintWindow(
+    openIpdPrintWindow(
       `${billLabel} — ${patient.admissionId}`,
       buildDetailedBillHtml(
         billLabel, patient, entries, investigations, bedAllotments, pharmBills,
@@ -851,14 +803,14 @@ export default function IpdBilling() {
     );
 
   const handlePrintSummary = () =>
-    openPrintWindow(
+    openIpdPrintWindow(
       `${billLabel} (Summary) — ${patient.admissionId}`,
       buildSummaryBillHtml(
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
         totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
         servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
-        investigations, pharmBills, totalGst, gstBreakdown,
+        investigations, pharmBills, entries, totalGst, gstBreakdown,
       ),
     );
 
@@ -1118,6 +1070,30 @@ export default function IpdBilling() {
               )}
             </CardContent>
           </Card>
+
+          {/* Doctor / Consultation Services — kept separate since these carry doctor/date/referral info */}
+          {doctorEntries.length > 0 && (
+            <Card className="border-indigo-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Doctor / Consultation Services</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 divide-y">
+                {doctorEntries.map(e => (
+                  <div key={e._id} className="px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-medium">{e.serviceName}</div>
+                      <div className="text-xs text-gray-500">
+                        Doctor: <span className="font-medium text-gray-700">{e.doctorName}</span>
+                        {" · "}Date: {fmtDate(e.date)}
+                        {patient.referredBy && <> {" · "}Referred Doctor: <span className="font-medium text-gray-700">{patient.referredBy}</span></>}
+                      </div>
+                    </div>
+                    <span className="font-semibold text-indigo-700">{fmt(e.totalCharge)}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Investigations */}
           {investigations.length > 0 && (

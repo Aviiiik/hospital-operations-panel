@@ -49,7 +49,7 @@ const SERVICES: ServiceEntry[] = [
   // ── CONSULTATION (code 10) ─────────────────────────────────────────────────
   { serviceGroup: "CONSULTATION",    serviceGroupCode: "10",  serviceName: "CONSULTATION",                          unit: "VISIT",          defaultCharge: 0,    sortOrder: 1,  requiresDoctor: true },
   { serviceGroup: "CONSULTATION",    serviceGroupCode: "10",  serviceName: "REFERRAL DOCTOR",                       unit: "VISIT",          defaultCharge: 0,    sortOrder: 2,  requiresDoctor: true, isReferral: true },
-  { serviceGroup: "CONSULTATION",    serviceGroupCode: "10",  serviceName: "INITIAL MANAGEMENT CHARGES",            unit: "PER CASE",       defaultCharge: 2000, sortOrder: 3 },
+  { serviceGroup: "CONSULTATION",    serviceGroupCode: "10",  serviceName: "INITIAL MANAGEMENT CHARGES",            unit: "PER CASE",       defaultCharge: 2000, sortOrder: 3,  requiresDoctor: true },
 
   // ── BLOOD (code 29) ────────────────────────────────────────────────────────
   { serviceGroup: "BLOOD",           serviceGroupCode: "29",  serviceName: "ASHOK BLOOD BANK",                      unit: "PER UNIT",       defaultCharge: 0,    sortOrder: 1 },

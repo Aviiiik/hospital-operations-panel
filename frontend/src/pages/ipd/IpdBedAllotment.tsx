@@ -9,13 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, BedDouble, Trash2, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CATEGORIES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
+import ipdService, { BED_CATEGORIES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime } from "@/services/ipdService";
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function nowTime() {
-  const n = new Date();
-  return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
-}
+function todayStr() { return todayIST(); }
+function nowTime() { return nowISTTime(); }
 function fmt(n: number) {
   return "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0 });
 }
@@ -102,7 +99,7 @@ export default function IpdBedAllotment() {
     setForm(f => ({ ...f, [field]: val }));
 
   const handleBedCategory = (cat: string) => {
-    const defaultCharge = BED_CHARGES[cat] ?? 0;
+    const defaultCharge = isBedChargeExempt(patient?.department) ? 0 : (BED_CHARGES[cat] ?? 0);
     setForm(f => ({ ...f, bedCategory: cat, bedNo: "", charge: defaultCharge }));
   };
 

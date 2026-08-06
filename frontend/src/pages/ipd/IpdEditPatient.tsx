@@ -13,6 +13,7 @@ import { ArrowLeft, Plus, Trash2, FlaskConical, LogOut, ReceiptText, IndianRupee
 import ipdService, {
   BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS, DISCHARGE_TYPES,
+  BED_CHARGES, isBedChargeExempt,
   type InsuranceCompany, type Tpa,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
@@ -42,6 +43,7 @@ export default function IpdEditPatient() {
   const { confirm, ConfirmDialog } = useConfirm();
 
   const [form, setForm]               = useState<any>(null);
+  const [originalDepartment, setOriginalDepartment] = useState("");
   const [doctors, setDoctors]         = useState<Doctor[]>([]);
   const [selectedDoc, setSelectedDoc] = useState("");
   const [specFilter, setSpecFilter]   = useState("");
@@ -70,6 +72,7 @@ export default function IpdEditPatient() {
           dob: p.dob ? new Date(p.dob).toISOString().slice(0, 10) : "",
           dischargeDate: p.dischargeDate ? new Date(p.dischargeDate).toISOString().slice(0, 10) : "",
         });
+        setOriginalDepartment(p.department || "");
         setDoctors(p.doctors || []);
       })
       .catch(() => toast.error("Failed to load patient"))
@@ -155,7 +158,31 @@ export default function IpdEditPatient() {
         doctors,
       };
       await ipdService.updatePatient(id!, payload);
-      toast.success("Patient record updated successfully");
+
+      // Keep any open bed allotment's charge in sync with the department's
+      // bed-charge-exempt status (OPD/Daycare = 0, everything else = normal rate).
+      let bedChargeNote = "";
+      const wasExempt = isBedChargeExempt(originalDepartment);
+      const isExemptNow = isBedChargeExempt(form.department);
+      if (form.department !== originalDepartment && wasExempt !== isExemptNow) {
+        try {
+          const ar = await ipdService.getBedAllotments(id!);
+          const openAllotments = (ar.data.data.allotments || []).filter((a: any) => !a.endDate);
+          if (openAllotments.length) {
+            await Promise.all(openAllotments.map((a: any) =>
+              ipdService.updateBedAllotment(a._id, {
+                charge: isExemptNow ? 0 : (BED_CHARGES[a.bedCategory] ?? 0),
+              })
+            ));
+            bedChargeNote = isExemptNow
+              ? " — bed charge set to ₹0"
+              : " — bed charge restored";
+          }
+        } catch { /* non-fatal: billing pages already fall back to department-aware rates */ }
+        setOriginalDepartment(form.department);
+      }
+
+      toast.success(`Patient record updated successfully${bedChargeNote}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update patient");
     } finally {

@@ -8,21 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Printer, IndianRupee, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { DISCHARGE_TYPES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
+import ipdService, {
+  DISCHARGE_TYPES, BED_CHARGES, computeBillingDays, isBedChargeExempt,
+  todayIST, nowISTTime, toISTDateStr,
+} from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 
-function todayStr() {
-  const n = new Date();
-  return new Date(n.getTime() + 330 * 60000).toISOString().slice(0, 10); // IST date
-}
-function toISTDateStr(d: Date | string): string {
-  const dt = typeof d === "string" ? new Date(d) : d;
-  return new Date(dt.getTime() + 330 * 60000).toISOString().slice(0, 10);
-}
-function nowTimeStr() {
-  const n = new Date();
-  return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
-}
+function todayStr() { return todayIST(); }
+function nowTimeStr() { return nowISTTime(); }
 function fmtRs(n: number) { return "₹" + Number(n || 0).toLocaleString("en-IN"); }
 function fmtDateLong(d: string | Date | undefined) {
   if (!d) return "—";
@@ -70,9 +63,8 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   const age       = patient.ageYears ? `${patient.ageYears} Year` : "—";
   const sexAge    = `${patient.gender || "—"} / ${age}`;
   const now       = new Date();
-  const printDate = now.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })
-    + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0")
-    + ":" + String(now.getSeconds()).padStart(2,"0");
+  const printDate = now.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" })
+    + " " + now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
 
   function section(title: string, content: string) {
     if (!content?.trim()) return "";
@@ -116,7 +108,15 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   .checkbox{width:12px;height:12px;border:1px solid #000;display:inline-block;margin-right:4px}
   .checked-by{margin-top:20px;font-size:11px}
   .print-date{text-align:left;font-size:10px;color:#333;margin-top:10px}
-  @media print{body{padding:10px 14px}}
+  .page-footer{font-size:9px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:4px}
+  @media print{
+    body{padding:0}
+    .page-header,.page-footer{position:fixed;left:14px;right:14px;background:#fff}
+    .page-header{top:0}
+    .page-footer{bottom:0;padding-bottom:8px}
+    .cert-body{padding:150px 14px 40px}
+    @page{margin:144px 14px 40px}
+  }
 </style>
 </head><body>
 
@@ -133,6 +133,7 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   </div>
 </div>
 
+<div class="cert-body">
 <div class="cert-title">DISCHARGE CERTIFICATE</div>
 
 <table class="info-table">
@@ -204,8 +205,15 @@ ${section("DISCHARGE STATUS AND ADVICE :-", form.adviceOnDischarge)}
   </div>
   <div class="print-date">Print Date : ${printDate}</div>
 </div>
+</div>
 
-<script>window.onload=function(){window.focus();window.print();setTimeout(()=>window.close(),500)}<\/script>
+<div class="page-footer">Arogya Maternity &amp; Nursing Home — Discharge Certificate — Computer generated document</div>
+
+<script>
+  window.onload=function(){window.focus();window.print();};
+  window.onafterprint=function(){window.close();};
+  setTimeout(function(){window.close();},60000);
+<\/script>
 </body></html>`);
   w.document.close();
 }
@@ -350,7 +358,7 @@ export default function IpdDischarge() {
         return s + days * (a.charge || 0);
       }, 0)
     : (() => {
-        const rate = patient.bedCategory ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
+        const rate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
         const days = patient.admissionDate && openFallback
           ? computeBillingDays(new Date(patient.admissionDate), openFallback)
           : billingDays;
