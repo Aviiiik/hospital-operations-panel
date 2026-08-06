@@ -16,7 +16,8 @@
     "seed:medicines": "tsx src/scripts/seedPharmacyMedicines.ts",
     "seed:investigation-items": "tsx src/scripts/seedInvestigationItems.ts",
     "seed:insurance-tpa": "tsx src/scripts/seedInsuranceTpa.ts",
-    "update:arogya-vendor": "tsx src/scripts/updateArogyaVendorName.ts"
+    "update:arogya-vendor": "tsx src/scripts/updateArogyaVendorName.ts",
+    "update:requires-doctor-flags": "tsx src/scripts/fixRequiresDoctorFlags.ts"
   },
   "keywords": [],
   "author": "",

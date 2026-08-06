@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCcw, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService from "@/services/ipdService";
+import ipdService, { todayIST } from "@/services/ipdService";
+import { openIpdPrintWindow, printHeaderHtml, printFooterHtml } from "@/lib/ipdPrint";
+import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,7 +68,7 @@ const BLANK_ITEM: PharmItem = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return todayIST(); }
 function fmt(n: number) {
   return "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
 }
@@ -83,6 +85,50 @@ function calcItem(it: PharmItem): PharmItem {
     ? Math.max(0, total - disc)
     : total - (total * disc / 100);
   return { ...it, totalAmount: total, netAmount: Math.max(0, net) };
+}
+
+// ─── Print a single pharmacy bill ─────────────────────────────────────────────
+function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
+  const rows = bill.items.map((it, i) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td>${it.itemName}</td>
+      <td>${it.package || "—"}</td>
+      <td>${it.batchNo || "—"}</td>
+      <td>${it.expiryDate || "—"}</td>
+      <td class="right">${fmt(parseFloat(it.mrp) || 0)}</td>
+      <td class="center">${it.qty}</td>
+      <td class="center">${it.discount || 0}${(it as any).discountType || "%"}</td>
+      <td class="right bold">${fmt(it.netAmount)}</td>
+    </tr>`).join("");
+
+  const body = `
+${printHeaderHtml(logo, "PHARMACY BILL")}
+<div class="print-body">
+<div class="info-grid">
+  <div><div class="info-label">Bill No</div><div class="info-val" style="font-family:monospace">${bill.vendorBillNo || "—"}</div></div>
+  <div><div class="info-label">Bill Date</div><div class="info-val">${fmtDate(bill.billDate)}</div></div>
+  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
+  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
+  <div><div class="info-label">Vendor</div><div class="info-val">${bill.vendor || "—"}</div></div>
+  <div><div class="info-label">Referred By</div><div class="info-val">${bill.referredBy || "—"}</div></div>
+</div>
+<h2>Items</h2>
+<table>
+  <thead><tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
+  <tbody>
+    ${rows}
+    <tr class="total-row"><td colspan="8">Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>
+  </tbody>
+</table>
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>
+</div>
+${printFooterHtml()}`;
+
+  openIpdPrintWindow(`Pharmacy Bill — ${bill.vendorBillNo || patient.admissionId}`, body);
 }
 
 // ─── Medicine dropdown with search ───────────────────────────────────────────
@@ -602,6 +648,10 @@ export default function IpdPharmacy() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-semibold text-green-700">{fmt(bill.netAmount)}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-400 hover:text-blue-600"
+                      onClick={e => { e.stopPropagation(); printPharmacyBill(patient, bill, logoUrl); }}>
+                      <Printer className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-indigo-400 hover:text-indigo-600"
                       onClick={e => { e.stopPropagation(); openEditBill(bill); }}>
                       <Pencil className="h-3.5 w-3.5" />

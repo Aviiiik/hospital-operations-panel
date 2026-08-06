@@ -11,10 +11,12 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { InvestigationVendor, InvestigationItem } from "@/services/ipdService";
+import ipdService, { InvestigationVendor, InvestigationItem, todayIST, nowISTTime } from "@/services/ipdService";
+import { openIpdPrintWindow, printHeaderHtml, printFooterHtml } from "@/lib/ipdPrint";
+import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,18 +66,65 @@ const EMPTY_ITEM: InvItem = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return todayIST(); }
 
-function nowTimeStr() {
-  const n = new Date();
-  return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
-}
+function nowTimeStr() { return nowISTTime(); }
 
 function fmtDate(iso: string) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "2-digit",
   });
+}
+
+function fmtMoney(n: number) {
+  return "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+}
+
+// ─── Print a single investigation requisition ─────────────────────────────────
+function printInvestigationRequisition(patient: any, inv: Investigation, logo: string) {
+  const rows = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td>${it.description}</td>
+      <td>${it.category || "—"}</td>
+      <td>${it.caseNo || "—"}</td>
+      <td>${it.reportDate ? fmtDate(it.reportDate) : "—"}</td>
+      <td class="right">${it.amount > 0 ? fmtMoney(it.amount) : "—"}</td>
+      <td class="right bold">${fmtMoney(it.netAmount || 0)}</td>
+    </tr>`).join("");
+
+  const body = `
+${printHeaderHtml(logo, "INVESTIGATION REQUISITION")}
+<div class="print-body">
+<div class="info-grid">
+  <div><div class="info-label">Req No</div><div class="info-val" style="font-family:monospace">${inv.reqNo}</div></div>
+  <div><div class="info-label">Req Date / Time</div><div class="info-val">${fmtDate(inv.reqDate)} ${inv.reqTime || ""}</div></div>
+  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
+  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
+  <div><div class="info-label">Age / Sex</div><div class="info-val">${patient.ageYears ? patient.ageYears + "Y " : ""}${patient.gender || "—"}</div></div>
+  <div><div class="info-label">Collection Centre</div><div class="info-val">${inv.collectionCentre || "—"}</div></div>
+  <div><div class="info-label">Referred By</div><div class="info-val">${inv.referredBy || "—"}</div></div>
+  <div><div class="info-label">Vendor</div><div class="info-val">${inv.vendor || "—"}${inv.vendorBillNo ? ` (${inv.vendorBillNo})` : ""}</div></div>
+  ${inv.isUrgent ? `<div><div class="info-label">Priority</div><div class="info-val" style="color:#b91c1c">URGENT</div></div>` : ""}
+  ${inv.remarks ? `<div style="grid-column:1/-1"><div class="info-label">Remarks</div><div class="info-val">${inv.remarks}</div></div>` : ""}
+</div>
+<h2>Investigation Items</h2>
+<table>
+  <thead><tr><th class="center">#</th><th>Description</th><th>Category</th><th>Case No</th><th>Report Date</th><th class="right">Lab Amt</th><th class="right">Net Amt</th></tr></thead>
+  <tbody>
+    ${rows}
+    <tr class="total-row"><td colspan="6">Total</td><td class="right">${fmtMoney(inv.totalAmount || 0)}</td></tr>
+  </tbody>
+</table>
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>
+</div>
+${printFooterHtml()}`;
+
+  openIpdPrintWindow(`Investigation Requisition — ${inv.reqNo}`, body);
 }
 
 // ─── TestSelect: searchable dropdown for a single investigation item row ──────
@@ -530,7 +579,7 @@ export default function IpdInvestigation() {
                     <th className="px-3 py-2 text-center font-medium">Items</th>
                     <th className="px-3 py-2 text-right font-medium">Total</th>
                     <th className="px-3 py-2 text-center font-medium">Urgent</th>
-                    <th className="px-3 py-2 text-center font-medium w-20">Actions</th>
+                    <th className="px-3 py-2 text-center font-medium w-28">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -556,6 +605,10 @@ export default function IpdInvestigation() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1 justify-center">
+                          <button onClick={() => printInvestigationRequisition(patient, inv, logoUrl)}
+                            className="p-1 text-indigo-500 hover:bg-indigo-50 rounded" title="Print">
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => loadForEdit(inv)}
                             className="p-1 text-blue-500 hover:bg-blue-50 rounded" title="Edit">
                             <Pencil className="h-3.5 w-3.5" />

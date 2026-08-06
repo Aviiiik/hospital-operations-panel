@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
   IPD_REFERRAL_DOCTORS, CatalogueService, ServiceGroup,
-  buildServiceGroups, SERVICE_GROUP_META, computeBillingDays,
+  buildServiceGroups, SERVICE_GROUP_META, computeBillingDays, todayIST,
 } from "@/services/ipdService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ interface BillingEntry {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return todayIST(); }
 
 function computeHours(fd: string, ft: string, td: string, tt: string): string {
   if (!fd || !td) return "";

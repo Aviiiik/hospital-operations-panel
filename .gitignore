@@ -3,6 +3,7 @@ backend/.env
 frontend/node_modules
 frontend/.env
 .claude
+CLAUDE.md
 # Logs
 logs
 *.log
@@ -16,6 +17,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
 
 # Editor directories and files
 .vscode/*

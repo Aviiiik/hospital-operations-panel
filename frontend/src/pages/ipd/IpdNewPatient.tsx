@@ -12,6 +12,7 @@ import { Plus, Trash2, ChevronDown, Settings2 } from "lucide-react";
 import ipdService, {
   BED_CATEGORIES, BED_CHARGES, BLOOD_GROUPS, DIET_TYPES,
   TREATMENT_CATEGORIES, PATIENT_CATEGORIES, IPD_DEPARTMENTS,
+  isBedChargeExempt, todayIST, nowISTTime,
   type InsuranceCompany, type Tpa,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
@@ -34,11 +35,10 @@ function calcAge(dob: string) {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayIST();
 }
 function nowTimeStr() {
-  const n = new Date();
-  return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
+  return nowISTTime();
 }
 
 const EMPTY = {
@@ -185,7 +185,7 @@ export default function IpdNewPatient() {
           await ipdService.createBedAllotment(newPatientId, {
             bedCategory:   form.bedCategory,
             bedNo:         form.bedNo,
-            charge:        BED_CHARGES[form.bedCategory] ?? 0,
+            charge:        isBedChargeExempt(form.department) ? 0 : (BED_CHARGES[form.bedCategory] ?? 0),
             allotmentDate: form.admissionDate,
             allotmentTime: form.admissionTime,
             effectiveTime: form.admissionTime,

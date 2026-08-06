@@ -8,10 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays } from "@/services/ipdService";
+import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return todayIST(); }
 function fmt(n: number) {
   return "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
 }
@@ -69,7 +69,15 @@ const PRINT_CSS = `
   .footer{display:flex;justify-content:space-between;font-size:11px;color:#555;margin-bottom:30px}
   .sig{display:flex;justify-content:space-between;margin-top:20px}
   .sig-line{border-top:1px solid #9ca3af;padding-top:4px;width:150px;text-align:center;font-size:11px;color:#4b5563}
-  @media print{body{padding:12px}}
+  .page-footer{font-size:9px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:4px}
+  @media print{
+    body{padding:0}
+    .print-header,.page-footer{position:fixed;left:20px;right:20px;background:#fff}
+    .print-header{top:0;padding-top:12px}
+    .page-footer{bottom:0;padding-bottom:8px}
+    .print-body{padding:104px 20px 36px}
+    @page{margin:98px 20px 32px}
+  }
 `;
 
 interface ReceiptEntry {
@@ -103,8 +111,8 @@ const BLANK = {
 // ── Single receipt print ──────────────────────────────────────────────────────
 function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number, logo: string) {
   const now = new Date();
-  const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric"})
-    + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
+  const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"})
+    + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"});
   const payDetail = (() => {
     if (receipt.receiptMode === "CASH") return "";
     const parts: string[] = [];
@@ -118,7 +126,7 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Receipt ${receipt.receiptNo}</title>
 <style>${PRINT_CSS}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #374151;padding-bottom:10px;margin-bottom:14px}
+  .print-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #374151;padding-bottom:10px}
   img{height:52px;object-fit:contain}
   .hosp{font-size:14px;font-weight:bold;color:#b91c1c}.sub{font-size:10px;color:#6b7280;margin-top:2px}
   h2{font-size:18px;font-weight:bold;color:#b91c1c;text-align:right}
@@ -127,7 +135,7 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   .total-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
   .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}
 </style></head><body>
-<div class="header">
+<div class="print-header">
   <div style="display:flex;align-items:center;gap:12px">
     <img src="${logo}" alt="Logo"/>
     <div><div class="hosp">AROGYA MATERNITY &amp; NURSING HOME</div>
@@ -136,6 +144,7 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   </div>
   <h2>RECEIPT</h2>
 </div>
+<div class="print-body">
 <div class="info-grid">
   <div><div class="il">Receipt No</div><div class="iv" style="font-family:monospace">${receipt.receiptNo}</div></div>
   <div><div class="il">Receipt Date</div><div class="iv">${fmtDate(receipt.receiptDate)}</div></div>
@@ -179,7 +188,13 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div style="text-align:right"><div style="font-size:11px;margin-bottom:20px">E &amp; O.E.</div><div class="sig-line" style="margin-left:auto">Authorised Signatory</div></div>
 </div>
-<script>window.onload=function(){window.focus();window.print();setTimeout(()=>window.close(),500)}<\/script>
+</div>
+<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated receipt</div>
+<script>
+  window.onload=function(){window.focus();window.print();};
+  window.onafterprint=function(){window.close();};
+  setTimeout(function(){window.close();},60000);
+<\/script>
 </body></html>`);
   w.document.close();
 }
@@ -212,11 +227,11 @@ function printAllReceipts(
   const netDue        = Math.max(0, grandTotal - totalReceived - totalTds - totalDis);
 
   const now = new Date();
-  const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric"})
-    + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
+  const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"})
+    + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"});
   const admDt     = patient.admissionDate ? fmtDateShort(patient.admissionDate) : "—";
-  const invoiceDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric"});
-  const invoiceTm = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false});
+  const invoiceDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"});
+  const invoiceTm = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Kolkata"});
   const ageStr = [
     patient.ageYears  ? patient.ageYears  + " Year"  : "",
     patient.ageMonths ? patient.ageMonths + " Month" : "",
@@ -258,12 +273,15 @@ function printAllReceipts(
   if (!w) { toast.error("Pop-up blocked — allow pop-ups"); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Money Receipt — ${patient.admissionId}</title>
-<style>${PRINT_CSS}</style></head><body>
-<div style="text-align:center;margin-bottom:8px">
+<style>${PRINT_CSS}
+  .print-header{text-align:center;border-bottom:2px solid #374151;padding-bottom:8px}
+</style></head><body>
+<div class="print-header">
   <img src="${logo}" alt="Logo" style="height:56px;object-fit:contain"/>
   <div style="font-size:15px;font-weight:bold;color:#b91c1c;margin-top:4px">AROGYA MATERNITY &amp; NURSING HOME</div>
   <div style="font-size:10px;color:#6b7280">(A Unit of R.P. Medical Foundation Pvt. Ltd.) &nbsp;|&nbsp; 71, Tollygunge Circular Road, Kolkata-700053</div>
 </div>
+<div class="print-body">
 <div class="title">MONEY RECEIPT</div>
 <div class="meta">
   <div><span class="lbl">Voucher No.</span><span class="val">${receipts[0].receiptNo}</span></div>
@@ -305,7 +323,13 @@ function printAllReceipts(
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Signature</div></div>
 </div>
-<script>window.onload=function(){window.focus();window.print();setTimeout(()=>window.close(),500)}<\/script>
+</div>
+<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated document</div>
+<script>
+  window.onload=function(){window.focus();window.print();};
+  window.onafterprint=function(){window.close();};
+  setTimeout(function(){window.close();},60000);
+<\/script>
 </body></html>`);
   w.document.close();
 }
@@ -381,7 +405,7 @@ export default function IpdReceipt() {
         return s + days * (a.charge || 0);
       }, 0)
     : (() => {
-        const rate = patient?.bedCategory ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
+        const rate = (patient?.bedCategory && !isBedChargeExempt(patient?.department)) ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
         const days = patient?.admissionDate
           ? computeBillingDays(new Date(patient.admissionDate), openEndDate)
           : 1;
