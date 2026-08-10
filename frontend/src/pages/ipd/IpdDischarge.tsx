@@ -343,9 +343,7 @@ export default function IpdDischarge() {
     ? computeBillingDays(new Date(patient.admissionDate), dischargeEndDate)
     : 1;
 
-  const admDays = patient.admissionDate
-    ? Math.floor((Date.now() - new Date(patient.admissionDate).getTime()) / 86400000)
-    : 0;
+  const admDays = billingDays;
 
   const openFallback = dischargeEndDate
     ?? (patient.estimateEndDate ? new Date(patient.estimateEndDate) : new Date());

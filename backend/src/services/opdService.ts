@@ -26,14 +26,22 @@ function istYearMonth(): { year: number; month: number } {
 
 async function getNextMonthlySerial(): Promise<{ year: string; month: string; serial: string }> {
   const { year, month } = istYearMonth();
-  const monthStart = new Date(`${year}-${String(month).padStart(2, "0")}-01T00:00:00+05:30`);
-  const nextMonth  = month === 12 ? 1 : month + 1;
-  const nextYear   = month === 12 ? year + 1 : year;
-  const monthEnd   = new Date(`${nextYear}-${String(nextMonth).padStart(2, "0")}-01T00:00:00+05:30`);
-  monthEnd.setMilliseconds(monthEnd.getMilliseconds() - 1);
-  const count = await OpdPatient.countDocuments({ registrationDate: { $gte: monthStart, $lte: monthEnd } });
-  const serial = String(count + 1).padStart(4, "0");
-  return { year: String(year), month: String(month).padStart(2, "0"), serial };
+  const yearStr = String(year);
+  const monthStr = String(month).padStart(2, "0");
+  const prefix = `OPD${yearStr}${monthStr}`;
+  // Find the highest-numbered patientId for this month and add 1.
+  // count+1 breaks when any patient is deleted (same class of bug as
+  // getNextYearlyRegistrationSerial): if a non-last patient is deleted, the
+  // count drops but the highest existing patientId doesn't, so count+1 keeps
+  // colliding with that still-existing patient on every retry — registration
+  // fails permanently instead of just skipping the gap.
+  const last = await OpdPatient.findOne(
+    { patientId: { $regex: `^${prefix}` } },
+    { patientId: 1 }
+  ).sort({ patientId: -1 });
+  const nextSerial = last ? parseInt(last.patientId.slice(prefix.length), 10) + 1 : 1;
+  const serial = String(nextSerial).padStart(4, "0");
+  return { year: yearStr, month: monthStr, serial };
 }
 
 async function getNextYearlyRegistrationSerial(): Promise<{ shortYear: string; serial: string }> {

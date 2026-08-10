@@ -174,6 +174,9 @@ function totalsBlock(
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
+</div>
+<div class="signatures" style="margin-top:40px">
+  <div><div class="sig-line" style="width:200px">Prepared By</div></div>
 </div>`;
 }
 
