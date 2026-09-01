@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
+import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS } from "@/lib/ipdPrint";
 
 function todayStr() { return todayIST(); }
 function fmt(n: number) {
@@ -54,6 +55,7 @@ function toWords(n: number): string {
 }
 
 const PRINT_CSS = `
+  ${DOC_GRID_CSS}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:12px;color:#333;padding:24px}
   .title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:14px;letter-spacing:0.05em}
@@ -72,15 +74,17 @@ const PRINT_CSS = `
   .page-footer{font-size:9px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:4px}
   @media print{
     body{padding:0}
-    .print-header,.page-footer{position:fixed;left:20px;right:20px;background:#fff}
-    .print-header{top:0;padding-top:12px}
-    .page-footer{bottom:0;padding-bottom:8px}
-    /* Top clearance lives entirely in @page's margin (repeats on every page)
-       rather than .print-body's own padding, which only applies to its first
-       fragment on a page break — otherwise page 2+ loses most of that
-       headroom and content crowds the repeating header. */
-    .print-body{padding:0 20px 36px}
-    @page{margin:130px 20px 32px}
+    /* .print-header rides in the doc-grid <thead> (repeats every page). The
+       .page-footer is fixed to the paper bottom and painted into the strip the
+       <tfoot> spacer reserves, so it repeats without overlapping content. */
+    .print-header{margin-bottom:8px}
+    .page-footer{position:fixed;left:20px;right:20px;bottom:0;background:#fff;
+      height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
+    @page{margin:20px 20px}
+  }
+  @media screen{
+    .doc-grid > tfoot{display:none}
+    .page-footer{margin-top:24px}
   }
 `;
 
@@ -125,20 +129,17 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
     if (receipt.chequeRefNo)   parts.push(`Ref: ${receipt.chequeRefNo}`);
     return parts.join(" | ");
   })();
-  const w = window.open("", "_blank", "width=700,height=500");
-  if (!w) { toast.error("Pop-up blocked — allow pop-ups"); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Receipt ${receipt.receiptNo}</title>
-<style>${PRINT_CSS}
-  .print-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #374151;padding-bottom:10px}
+  const css = `${PRINT_CSS}
+  .print-header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #374151;padding-bottom:10px}
   img{height:52px;object-fit:contain}
   .hosp{font-size:14px;font-weight:bold;color:#b91c1c}.sub{font-size:10px;color:#6b7280;margin-top:2px}
   h2{font-size:18px;font-weight:bold;color:#b91c1c;text-align:right}
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:12px}
   .il{font-size:10px;color:#6b7280}.iv{font-weight:600;font-size:12px}
   .total-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
-  .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}
-</style></head><body>
+  .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}`;
+
+  const header = `
 <div class="print-header">
   <div style="display:flex;align-items:center;gap:12px">
     <img src="${logo}" alt="Logo"/>
@@ -147,8 +148,9 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
     <div class="sub">71, Tollygunge Circular Road, Kolkata-700053</div></div>
   </div>
   <h2>RECEIPT</h2>
-</div>
-<div class="print-body">
+</div>`;
+
+  const detailSection = `
 <div class="info-grid">
   <div><div class="il">Receipt No</div><div class="iv" style="font-family:monospace">${receipt.receiptNo}</div></div>
   <div><div class="il">Receipt Date</div><div class="iv">${fmtDate(receipt.receiptDate)}</div></div>
@@ -186,21 +188,19 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   <div class="total-label">Amount Received</div>
   <div class="total-amt">${fmt(receipt.receiptAmount)}</div>
 </div>
-<div class="words-box" style="margin-top:10px">(Amount Received : Rupees ${toWords(receipt.receiptAmount)} Only)</div>
+<div class="words-box" style="margin-top:10px">(Amount Received : Rupees ${toWords(receipt.receiptAmount)} Only)</div>`;
+
+  const signSection = `
 <div class="footer"><span>Print Date : ${printDt}</span></div>
 <div class="sig">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div style="text-align:right"><div style="font-size:11px;margin-bottom:20px">E &amp; O.E.</div><div class="sig-line" style="margin-left:auto">Authorised Signatory</div></div>
-</div>
-</div>
-<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated receipt</div>
-<script>
-  window.onload=function(){window.focus();window.print();};
-  window.onafterprint=function(){window.close();};
-  setTimeout(function(){window.close();},60000);
-<\/script>
-</body></html>`);
-  w.document.close();
+</div>`;
+
+  const body = wrapPrintDoc(header, [detailSection, signSection],
+    `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated receipt</div>`);
+
+  printViaHiddenIframe(`Receipt ${receipt.receiptNo}`, css, body);
 }
 
 interface ChargeData {
@@ -273,19 +273,18 @@ function printAllReceipts(
     </tr>`;
   }).join("");
 
-  const w = window.open("", "_blank", "width=780,height=620");
-  if (!w) { toast.error("Pop-up blocked — allow pop-ups"); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Money Receipt — ${patient.admissionId}</title>
-<style>${PRINT_CSS}
-  .print-header{text-align:center;border-bottom:2px solid #374151;padding-bottom:8px}
-</style></head><body>
+  const css = `${PRINT_CSS}
+  .print-header{text-align:center;border-bottom:2px solid #374151;padding-bottom:8px;
+                display:flex;flex-direction:column;align-items:center;justify-content:center}`;
+
+  const header = `
 <div class="print-header">
   <img src="${logo}" alt="Logo" style="height:56px;object-fit:contain"/>
   <div style="font-size:15px;font-weight:bold;color:#b91c1c;margin-top:4px">AROGYA MATERNITY &amp; NURSING HOME</div>
   <div style="font-size:10px;color:#6b7280">(A Unit of R.P. Medical Foundation Pvt. Ltd.) &nbsp;|&nbsp; 71, Tollygunge Circular Road, Kolkata-700053</div>
-</div>
-<div class="print-body">
+</div>`;
+
+  const metaSection = `
 <div class="title">MONEY RECEIPT</div>
 <div class="meta">
   <div><span class="lbl">Voucher No.</span><span class="val">${receipts[0].receiptNo}</span></div>
@@ -297,7 +296,9 @@ function printAllReceipts(
     <div><span class="lbl">Patient Id :</span><span class="val">${patient.admissionId}</span></div>
     <div style="margin-top:3px"><span class="lbl">Gender/Age :</span><span class="val">${patient.gender || "—"} / ${ageStr}</span></div>
   </div>
-</div>
+</div>`;
+
+  const tableSection = `
 <table>
   <thead>
     <tr><th style="width:75%">Description</th><th class="right" style="width:25%">Amount(Rs.)</th></tr>
@@ -317,7 +318,9 @@ function printAllReceipts(
       <td class="right" style="color:${netDue > 0 ? "#b91c1c" : "#15803d"}">${fmtAmt(netDue)}</td>
     </tr>
   </tbody>
-</table>
+</table>`;
+
+  const signSection = `
 <div class="words-box">(Amount Received : Rupees ${toWords(totalReceived)} Only)</div>
 <div class="footer">
   <span>Print Date : ${printDt}</span>
@@ -326,16 +329,12 @@ function printAllReceipts(
 <div class="sig">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Signature</div></div>
-</div>
-</div>
-<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated document</div>
-<script>
-  window.onload=function(){window.focus();window.print();};
-  window.onafterprint=function(){window.close();};
-  setTimeout(function(){window.close();},60000);
-<\/script>
-</body></html>`);
-  w.document.close();
+</div>`;
+
+  const body = wrapPrintDoc(header, [metaSection, tableSection, signSection],
+    `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated document</div>`);
+
+  printViaHiddenIframe(`Money Receipt — ${patient.admissionId}`, css, body);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
