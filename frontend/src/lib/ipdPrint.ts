@@ -31,8 +31,48 @@ export const DOC_GRID_CSS = `
   @media print { .doc-grid > thead > tr > td { padding-bottom: 30px; } }
 `;
 
+// Bordered hospital-identity box used as the repeating <thead> header on the
+// pharmacy / investigation / receipt prints (billing has its own taller variant).
+// Short + fixed-height + flex-only so Chrome resolves its size and repeats it on
+// every printed page. `.doc-title` is the per-document caption that goes in the
+// first body section (page 1 only).
+export const HOSPITAL_HEADER_CSS = `
+  .hosp-header { display: block; }
+  .hosp-box { display: flex; align-items: stretch; border: 1.5px solid #111; }
+  .hosp-box-logo { display: flex; align-items: center; justify-content: center;
+    padding: 8px 16px; border-right: 1.5px solid #111; }
+  .hosp-box-logo img { width: 92px; height: 92px; object-fit: contain; }
+  .hosp-box-info { flex: 1; text-align: center; padding: 8px 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .hb-name { font-size: 15px; font-weight: bold; letter-spacing: .02em; color: #111; }
+  .hb-line { font-size: 9px; color: #333; margin-top: 1px; }
+  .hb-reg  { font-size: 9px; font-weight: bold; margin-top: 2px; color: #111; }
+  .doc-title { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: .08em;
+    text-transform: uppercase; text-decoration: underline; margin: 4px 0 12px; color: #111; }
+  @media print  { .hosp-header { height: 120px; overflow: hidden; margin: 0 0 4px; } }
+  @media screen { .hosp-header { margin-bottom: 14px; } }
+`;
+
+export function hospitalHeaderHtml(logo: string) {
+  return `
+<div class="hosp-header">
+  <div class="hosp-box">
+    <div class="hosp-box-logo"><img src="${logo}" alt="Logo"/></div>
+    <div class="hosp-box-info">
+      <div class="hb-name">AROGYA MATERNITY &amp; NURSING HOME</div>
+      <div class="hb-line">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
+      <div class="hb-line">(Licence Under W.B. Clinical Establishment Act)</div>
+      <div class="hb-reg">Regd. No: 34257492</div>
+      <div class="hb-line">71, Tollygunge Circular Road, Kolkata-700053 (New Alipore, Sital Sadan Compound)</div>
+      <div class="hb-line">Phone: (033) 2400-0681 / 0684 &nbsp;|&nbsp; Fax: (033) 2400-1180</div>
+    </div>
+  </div>
+</div>`;
+}
+
 export const PRINT_BASE_CSS = `
   ${DOC_GRID_CSS}
+  ${HOSPITAL_HEADER_CSS}
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 12px; color: #333; }
   h1  { font-size: 22px; font-weight: bold; color: #b91c1c; letter-spacing: 0.03em; }
