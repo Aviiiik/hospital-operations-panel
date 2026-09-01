@@ -136,6 +136,17 @@ function patientInfoBlock(patient: any) {
 </div>`;
 }
 
+function printDoctorServiceSlip(patient: any, entries: BillingEntry[], logo: string) {
+  const body = `
+${printHeaderHtml(logo, "Doctor / Consultation Services")}
+<div class="print-body">
+${patientInfoBlock(patient)}
+${doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)}
+</div>
+${printFooterHtml()}`;
+  openIpdPrintWindow(`Doctor Services — ${patient.admissionId}`, body);
+}
+
 function totalsBlock(
   totalBedCharge: number, servicesGross: number, invTotal: number, pharmTotal: number,
   servicesDiscount: number, billDiscAmt: number, grandTotal: number,
@@ -1077,8 +1088,17 @@ export default function IpdBilling() {
           {/* Doctor / Consultation Services — kept separate since these carry doctor/date/referral info */}
           {doctorEntries.length > 0 && (
             <Card className="border-indigo-200">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-base">Doctor / Consultation Services</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  onClick={() => printDoctorServiceSlip(patient, doctorEntries, logoUrl)}
+                  title="Print all doctor / consultation services"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print
+                </Button>
               </CardHeader>
               <CardContent className="p-0 divide-y">
                 {doctorEntries.map(e => (

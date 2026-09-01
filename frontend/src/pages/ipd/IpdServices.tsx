@@ -11,9 +11,10 @@ import { ArrowLeft, Pencil, Trash2, Plus, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
-  IPD_REFERRAL_DOCTORS, CatalogueService, ServiceGroup,
+  CatalogueService, ServiceGroup,
   buildServiceGroups, SERVICE_GROUP_META, computeBillingDays, todayIST,
 } from "@/services/ipdService";
+import opdService from "@/services/opdService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,13 +101,14 @@ export default function IpdServices() {
   const [isCustomSvc,   setIsCustomSvc]   = useState(false);
   const [customSvcName, setCustomSvcName] = useState("");
 
+  const [allDoctors,   setAllDoctors]   = useState<{ _id: string; name: string; specialization: string }[]>([]);
   const [doctorSearch, setDoctorSearch] = useState("");
   const [showDrDrop,   setShowDrDrop]   = useState(false);
   const doctorMatches = useMemo(
     () => doctorSearch.trim()
-      ? IPD_REFERRAL_DOCTORS.filter(d => d.name.toLowerCase().includes(doctorSearch.toLowerCase()))
+      ? allDoctors.filter(d => d.name.toLowerCase().includes(doctorSearch.toLowerCase()))
       : [],
-    [doctorSearch]
+    [doctorSearch, allDoctors]
   );
 
   const activeGroup: ServiceGroup | undefined =
@@ -138,6 +140,12 @@ export default function IpdServices() {
   };
 
   useEffect(() => { loadCatalogue(); }, []);
+
+  useEffect(() => {
+    opdService.getDoctors().then(r => {
+      setAllDoctors(r.data.data.doctors || []);
+    }).catch(err => console.error("Failed to load doctors", err));
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -492,11 +500,11 @@ export default function IpdServices() {
                 {showDrDrop && doctorMatches.length > 0 && (
                   <div className="absolute z-30 top-full left-0 right-0 border bg-white rounded-md shadow-xl max-h-44 overflow-y-auto">
                     {doctorMatches.map(d => (
-                      <button key={d.code} type="button"
+                      <button key={d._id} type="button"
                         onMouseDown={() => { setF("doctorName", d.name); setDoctorSearch(d.name); setShowDrDrop(false); }}
                         className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex justify-between items-center">
                         <span className="font-medium">{d.name}</span>
-                        {d.speciality && <span className="text-gray-400 text-[10px]">{d.speciality}</span>}
+                        {d.specialization && <span className="text-gray-400 text-[10px]">{d.specialization}</span>}
                       </button>
                     ))}
                   </div>

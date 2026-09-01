@@ -55,6 +55,21 @@ export interface ServiceGroup {
   allowCustom?: boolean;
 }
 
+// Full catalogue document as stored/returned by the admin CRUD endpoints
+// (getServiceCatalogue/create/update/deleteServiceCatalogueItem below).
+export interface ServiceCatalogueEntry {
+  _id: string;
+  serviceGroup: string;
+  serviceGroupCode: string;
+  serviceName: string;
+  unit: string;
+  defaultCharge: number;
+  requiresDoctor: boolean;
+  isReferral: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 // ─── Static fallback catalogue (used while API loads) ─────────────────────────
 // Groups that allow custom entries but have no fixed services are listed here
 // so the UI can still show those group buttons immediately.
@@ -77,7 +92,10 @@ export const SERVICE_GROUP_META: { code: string; name: string; allowCustom: bool
   { code: "001", name: "GENERAL",        allowCustom: true  },
 ];
 
-// Build SERVICE_GROUPS from API items + group meta
+// Build SERVICE_GROUPS from API items + group meta. Groups present in the
+// catalogue data but not in the static SERVICE_GROUP_META list (i.e. new
+// groups created from the Service Catalogue admin page) are appended too,
+// so a freshly-added group is usable for billing right away.
 export function buildServiceGroups(
   apiItems: Array<{
     _id: string; serviceGroup: string; serviceGroupCode: string;
@@ -85,19 +103,37 @@ export function buildServiceGroups(
     requiresDoctor?: boolean; isReferral?: boolean;
   }>
 ): ServiceGroup[] {
-  return SERVICE_GROUP_META.map(meta => {
-    const services: CatalogueService[] = apiItems
-      .filter(i => i.serviceGroupCode === meta.code || i.serviceGroup === meta.name)
-      .map(i => ({
-        _id:           i._id,
-        name:          i.serviceName,
-        unit:          i.unit,
-        defaultCharge: i.defaultCharge,
-        requiresDoctor:i.requiresDoctor,
-        isReferral:    i.isReferral,
-      }));
-    return { code: meta.code, name: meta.name, services, allowCustom: meta.allowCustom };
+  const toService = (i: (typeof apiItems)[number]): CatalogueService => ({
+    _id:            i._id,
+    name:           i.serviceName,
+    unit:           i.unit,
+    defaultCharge:  i.defaultCharge,
+    requiresDoctor: i.requiresDoctor,
+    isReferral:     i.isReferral,
   });
+
+  const metaGroups = SERVICE_GROUP_META.map(meta => ({
+    code: meta.code,
+    name: meta.name,
+    services: apiItems
+      .filter(i => i.serviceGroupCode === meta.code || i.serviceGroup === meta.name)
+      .map(toService),
+    allowCustom: meta.allowCustom,
+  }));
+
+  const metaCodes = new Set(SERVICE_GROUP_META.map(m => m.code));
+  const metaNames = new Set(SERVICE_GROUP_META.map(m => m.name));
+  const extraGroups = new Map<string, ServiceGroup>();
+  apiItems.forEach(i => {
+    if (metaCodes.has(i.serviceGroupCode) || metaNames.has(i.serviceGroup)) return;
+    const key = i.serviceGroupCode || i.serviceGroup;
+    if (!extraGroups.has(key)) {
+      extraGroups.set(key, { code: i.serviceGroupCode, name: i.serviceGroup, services: [], allowCustom: true });
+    }
+    extraGroups.get(key)!.services.push(toService(i));
+  });
+
+  return [...metaGroups, ...extraGroups.values()];
 }
 
 // ─── Billing day calculation (12 AM IST → 11:59 PM IST, i.e. calendar day) ───
@@ -133,75 +169,6 @@ export function toISTDateStr(d: Date | string): string {
   const dt = typeof d === "string" ? new Date(d) : d;
   return new Date(dt.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
-
-// ─── Doctor list ──────────────────────────────────────────────────────────────
-
-export const IPD_REFERRAL_DOCTORS = [
-  { code: "004", name: "DEBARCHAN GHOSH",             speciality: "SURGEON" },
-  { code: "048", name: "A. K. KHAITAN",               speciality: "PSYCHIATRY" },
-  { code: "068", name: "ABHIJIT MONDAL",              speciality: "" },
-  { code: "010", name: "ACHYUT ROY CHOUDHURI",        speciality: "ANESTHETIST" },
-  { code: "052", name: "AMITAVA DAS (SPECIALIST)",    speciality: "CARDIOLOGIST" },
-  { code: "006", name: "ANISH HAZRA",                 speciality: "" },
-  { code: "019", name: "ANUVAB GOSWAMI",              speciality: "" },
-  { code: "067", name: "ANWESHA CHAKRABORTY",         speciality: "" },
-  { code: "015", name: "ARCOJIT GHOSH",               speciality: "" },
-  { code: "012", name: "ARJUN ROY",                   speciality: "NEPHROLOGIST" },
-  { code: "034", name: "ARPITA SARKAR",               speciality: "" },
-  { code: "025", name: "AVISHEK JAISWAL",             speciality: "" },
-  { code: "050", name: "BARUN PRAMANIK",              speciality: "PHYSIOTHERAPY" },
-  { code: "002", name: "BHASKAR SINHA",               speciality: "GENERAL" },
-  { code: "043", name: "CHANDRANEEL SAHA",            speciality: "ANESTHETIST" },
-  { code: "021", name: "D. J. BHAUMIK",               speciality: "MBBS, MS" },
-  { code: "033", name: "DEBANIK SARKAR",              speciality: "" },
-  { code: "061", name: "DEBARCHAN GHOSH (SPECIALIST)",speciality: "SURGEON" },
-  { code: "013", name: "DEEP DAS (SPECIALIST)",       speciality: "NEUROLOGIST" },
-  { code: "042", name: "DR. ARDHENDU SEKHAR PANDIT",  speciality: "" },
-  { code: "055", name: "EMERGENCY MANAGEMENT CARE",   speciality: "" },
-  { code: "063", name: "GOURAB BANERJEE",             speciality: "" },
-  { code: "062", name: "GOURAV BANERJEE",             speciality: "" },
-  { code: "001", name: "GOUTAM GHOSH",                speciality: "GENERAL" },
-  { code: "059", name: "HIMADRI SEKHAR CHAKRABORTY",  speciality: "ANESTHETIST" },
-  { code: "049", name: "INDRANEEL SAHA",              speciality: "GASTROINTESTINAL" },
-  { code: "008", name: "INITIAL MANAGEMENT CHARGES",  speciality: "" },
-  { code: "009", name: "K. C. MALLICK",               speciality: "" },
-  { code: "014", name: "LALTU CHANDA",                speciality: "PHYSIOTHERAPY" },
-  { code: "070", name: "MALOY KUMAR BERA",            speciality: "" },
-  { code: "047", name: "MANOJ KUMAR ADAK",            speciality: "ANESTHETIST" },
-  { code: "060", name: "MD. BASIR AHAMED",            speciality: "" },
-  { code: "011", name: "MONICA SHAH",                 speciality: "GYNAECOLOGIST" },
-  { code: "045", name: "MUKESH KUMAR VIJAY",          speciality: "UROLOGIST & GEN. SURGEON" },
-  { code: "069", name: "NILADRI SEKHAR MUKHERJEE",    speciality: "ANESTHETIST" },
-  { code: "023", name: "NIRDESH TIWARI",              speciality: "" },
-  { code: "035", name: "P.K.PUJARI",                  speciality: "" },
-  { code: "030", name: "PIYALI CHATTOPADHYAY",        speciality: "GYNAECOLOGIST" },
-  { code: "053", name: "PRANJAL SARKAR",              speciality: "" },
-  { code: "073", name: "PREETI VIJAY",                speciality: "GYNAECOLOGIST & OBSTERTRICIAN" },
-  { code: "066", name: "PREETY VIJAY",                speciality: "GYNAECOLOGIST" },
-  { code: "007", name: "RAJESH JINDEL",               speciality: "ONCOLOGY" },
-  { code: "040", name: "RESHMI DUTTA SARKAR",         speciality: "" },
-  { code: "065", name: "RICK BANERJEE",               speciality: "PULMONOLOGIST" },
-  { code: "028", name: "SAIKAT SARKAR",               speciality: "" },
-  { code: "031", name: "SANDIP BHATTACHRYA",          speciality: "" },
-  { code: "017", name: "SANJAY SEN",                  speciality: "ORTHOPAEDIC SURGEON" },
-  { code: "046", name: "SANKHADIP PRAMANIK",          speciality: "" },
-  { code: "056", name: "SASHI JINDEL",                speciality: "GYNAECOLOGIST" },
-  { code: "024", name: "SIDHARTH DAS",                speciality: "" },
-  { code: "026", name: "SK.M. A.UDDIN",               speciality: "" },
-  { code: "064", name: "SOUGATA BHATTACHARYA",        speciality: "" },
-  { code: "020", name: "SOUMYA DAS",                  speciality: "PULMONOLOGIST" },
-  { code: "005", name: "SOUMYA GAYEN",                speciality: "" },
-  { code: "072", name: "SOUMYADIP GUPTA",             speciality: "ANESTHETIST" },
-  { code: "018", name: "SOURAV BASU",                 speciality: "ANESTHETIST" },
-  { code: "032", name: "SREEMANTI BAG",               speciality: "" },
-  { code: "044", name: "SUBHADIP PAL",                speciality: "" },
-  { code: "041", name: "SUBIR PAUL",                  speciality: "PAEDIATRIC SURGEON" },
-  { code: "058", name: "SUMIT GOSWAMI",               speciality: "ANESTHETIST" },
-  { code: "051", name: "SUPARNA DAS",                 speciality: "SPEACH THERAPIST" },
-  { code: "016", name: "TAPAS LAHA",                  speciality: "" },
-  { code: "054", name: "VIDAGDHAMAY BISWAS",          speciality: "ANESTHETIST" },
-  { code: "057", name: "VIPIN KATIYAR",               speciality: "UROLOGIST & GEN. SURGEON" },
-];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -242,7 +209,7 @@ export const BED_CHARGES: Record<string, number> = {
   "Four Bed General Bed (AC) Female":  1500,
 };
 
-export const RECEIPT_MODES = ["CASH", "CHEQUE", "NEFT", "UPI", "CARD", "DD"];
+export const RECEIPT_MODES = ["CASH", "CHEQUE", "NEFT", "UPI", "CARD-DR/CR", "DD"];
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
