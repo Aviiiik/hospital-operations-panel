@@ -15,7 +15,7 @@ import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp, Print
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationVendor, InvestigationItem, todayIST, nowISTTime } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, printFooterHtml } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, printHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -81,9 +81,9 @@ function fmtMoney(n: number) {
   return "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
 }
 
-// ─── Print a single investigation requisition ─────────────────────────────────
-function printInvestigationRequisition(patient: any, inv: Investigation, logo: string) {
-  const rows = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
+// ─── Build the print sections for one requisition ─────────────────────────────
+function invRequisitionSections(patient: any, inv: Investigation, pageBreakBefore = false) {
+  const rowArr = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
     <tr>
       <td class="center">${i + 1}</td>
       <td>${it.description}</td>
@@ -92,12 +92,10 @@ function printInvestigationRequisition(patient: any, inv: Investigation, logo: s
       <td>${it.reportDate ? fmtDate(it.reportDate) : "—"}</td>
       <td class="right">${it.amount > 0 ? fmtMoney(it.amount) : "—"}</td>
       <td class="right bold">${fmtMoney(it.netAmount || 0)}</td>
-    </tr>`).join("");
+    </tr>`);
 
-  const body = `
-${printHeaderHtml(logo, "INVESTIGATION REQUISITION")}
-<div class="print-body">
-<div class="info-grid">
+  const infoBlock = `
+<div class="info-grid"${pageBreakBefore ? ' style="page-break-before:always"' : ""}>
   <div><div class="info-label">Req No</div><div class="info-val" style="font-family:monospace">${inv.reqNo}</div></div>
   <div><div class="info-label">Req Date / Time</div><div class="info-val">${fmtDate(inv.reqDate)} ${inv.reqTime || ""}</div></div>
   <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
@@ -108,23 +106,48 @@ ${printHeaderHtml(logo, "INVESTIGATION REQUISITION")}
   <div><div class="info-label">Vendor</div><div class="info-val">${inv.vendor || "—"}${inv.vendorBillNo ? ` (${inv.vendorBillNo})` : ""}</div></div>
   ${inv.isUrgent ? `<div><div class="info-label">Priority</div><div class="info-val" style="color:#b91c1c">URGENT</div></div>` : ""}
   ${inv.remarks ? `<div style="grid-column:1/-1"><div class="info-label">Remarks</div><div class="info-val">${inv.remarks}</div></div>` : ""}
-</div>
-<h2>Investigation Items</h2>
-<table>
-  <thead><tr><th class="center">#</th><th>Description</th><th>Category</th><th>Case No</th><th>Report Date</th><th class="right">Lab Amt</th><th class="right">Net Amt</th></tr></thead>
-  <tbody>
-    ${rows}
-    <tr class="total-row"><td colspan="6">Total</td><td class="right">${fmtMoney(inv.totalAmount || 0)}</td></tr>
-  </tbody>
-</table>
+</div>`;
+
+  const invHead = `<tr><th class="center">#</th><th>Description</th><th>Category</th><th>Case No</th><th>Report Date</th><th class="right">Lab Amt</th><th class="right">Net Amt</th></tr>`;
+  const invCols = `<colgroup><col style="width:5%"><col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:14%"><col style="width:11%"><col style="width:11%"></colgroup>`;
+  const invFoot = `<tr class="total-row"><td colspan="6">Total</td><td class="right">${fmtMoney(inv.totalAmount || 0)}</td></tr>`;
+
+  const sigBlock = `
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
-</div>
-</div>
-${printFooterHtml()}`;
+</div>`;
 
+  return [
+    infoBlock,
+    ...chunkTableSections(`Investigation Items — ${inv.reqNo}`, invCols, invHead, rowArr, invFoot),
+    sigBlock,
+  ];
+}
+
+// ─── Print a single investigation requisition ─────────────────────────────────
+function printInvestigationRequisition(patient: any, inv: Investigation, logo: string) {
+  const body = wrapPrintDoc(
+    printHeaderHtml(logo, "INVESTIGATION REQUISITION"),
+    invRequisitionSections(patient, inv),
+  );
   openIpdPrintWindow(`Investigation Requisition — ${inv.reqNo}`, body);
+}
+
+// ─── Print every investigation requisition for this patient ───────────────────
+function printAllInvestigationRequisitions(patient: any, invs: Investigation[], logo: string) {
+  if (!invs.length) {
+    toast.error("No requisitions to print");
+    return;
+  }
+  const sections = invs.flatMap((inv, idx) =>
+    invRequisitionSections(patient, inv, idx > 0),
+  );
+  const body = wrapPrintDoc(
+    printHeaderHtml(logo, "INVESTIGATION REQUISITIONS"),
+    sections,
+  );
+  openIpdPrintWindow(`Investigation Requisitions — ${patient.admissionId}`, body);
 }
 
 // ─── TestSelect: searchable dropdown for a single investigation item row ──────
@@ -550,18 +573,30 @@ export default function IpdInvestigation() {
 
       {/* ── Previous requisitions (collapsible table) ── */}
       <div className="border rounded-md bg-white">
-        <button
-          className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 rounded-t-md hover:bg-gray-100 transition-colors"
-          onClick={() => setListOpen(v => !v)}
-        >
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
-            Previous Requisitions
-            <Badge variant="secondary" className="text-[10px]">{investigations.length}</Badge>
-          </span>
-          {listOpen
-            ? <ChevronUp className="h-4 w-4 text-gray-400" />
-            : <ChevronDown className="h-4 w-4 text-gray-400" />}
-        </button>
+        <div className="flex items-center bg-gray-50 rounded-t-md">
+          <button
+            className="flex-1 flex items-center justify-between px-4 py-2 hover:bg-gray-100 transition-colors rounded-tl-md"
+            onClick={() => setListOpen(v => !v)}
+          >
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+              Previous Requisitions
+              <Badge variant="secondary" className="text-[10px]">{investigations.length}</Badge>
+            </span>
+            {listOpen
+              ? <ChevronUp className="h-4 w-4 text-gray-400" />
+              : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          </button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mr-3 h-7 text-xs gap-1"
+            disabled={investigations.length === 0}
+            onClick={() => printAllInvestigationRequisitions(patient, investigations, logoUrl)}
+          >
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Button>
+        </div>
 
         {listOpen && (
           investigations.length === 0 ? (

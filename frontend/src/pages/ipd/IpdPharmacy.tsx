@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCc
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { todayIST } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, printFooterHtml } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, printHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ function calcItem(it: PharmItem): PharmItem {
 
 // ─── Print a single pharmacy bill ─────────────────────────────────────────────
 function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
-  const rows = bill.items.map((it, i) => `
+  const rowArr = bill.items.map((it, i) => `
     <tr>
       <td class="center">${i + 1}</td>
       <td>${it.itemName}</td>
@@ -100,11 +100,9 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
       <td class="center">${it.qty}</td>
       <td class="center">${it.discount || 0}${(it as any).discountType || "%"}</td>
       <td class="right bold">${fmt(it.netAmount)}</td>
-    </tr>`).join("");
+    </tr>`);
 
-  const body = `
-${printHeaderHtml(logo, "PHARMACY BILL")}
-<div class="print-body">
+  const infoBlock = `
 <div class="info-grid">
   <div><div class="info-label">Bill No</div><div class="info-val" style="font-family:monospace">${bill.vendorBillNo || "—"}</div></div>
   <div><div class="info-label">Bill Date</div><div class="info-val">${fmtDate(bill.billDate)}</div></div>
@@ -112,23 +110,83 @@ ${printHeaderHtml(logo, "PHARMACY BILL")}
   <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
   <div><div class="info-label">Vendor</div><div class="info-val">${bill.vendor || "—"}</div></div>
   <div><div class="info-label">Referred By</div><div class="info-val">${bill.referredBy || "—"}</div></div>
-</div>
-<h2>Items</h2>
-<table>
-  <thead><tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr></thead>
-  <tbody>
-    ${rows}
-    <tr class="total-row"><td colspan="8">Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>
-  </tbody>
-</table>
+</div>`;
+
+  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr>`;
+  const phCols = `<colgroup><col style="width:5%"><col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:16%"></colgroup>`;
+  const phFoot = `<tr class="total-row"><td colspan="8">Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
+
+  const sigBlock = `
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
-</div>
-</div>
-${printFooterHtml()}`;
+</div>`;
+
+  const body = wrapPrintDoc(
+    printHeaderHtml(logo, "PHARMACY BILL"),
+    [
+      infoBlock,
+      ...chunkTableSections("Items", phCols, phHead, rowArr, phFoot),
+      sigBlock,
+    ],
+  );
 
   openIpdPrintWindow(`Pharmacy Bill — ${bill.vendorBillNo || patient.admissionId}`, body);
+}
+
+// ─── Print every pharmacy bill for the admission in one document ──────────────
+function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
+  if (!bills.length) { toast.error("No pharmacy bills to print"); return; }
+
+  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr>`;
+  const phCols = `<colgroup><col style="width:5%"><col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:16%"></colgroup>`;
+
+  const grandTotal = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
+
+  const infoBlock = `
+<div class="info-grid">
+  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
+  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
+  <div><div class="info-label">Pharmacy Bills</div><div class="info-val">${bills.length}</div></div>
+  <div><div class="info-label">Printed</div><div class="info-val">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div></div>
+</div>`;
+
+  const billSections = bills.flatMap(bill => {
+    const rowArr = bill.items.map((it, i) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td>${it.itemName}</td>
+      <td>${it.package || "—"}</td>
+      <td>${it.batchNo || "—"}</td>
+      <td>${it.expiryDate || "—"}</td>
+      <td class="right">${fmt(parseFloat(it.mrp) || 0)}</td>
+      <td class="center">${it.qty}</td>
+      <td class="center">${it.discount || 0}${(it as any).discountType || "%"}</td>
+      <td class="right bold">${fmt(it.netAmount)}</td>
+    </tr>`);
+    const heading = `Bill ${bill.vendorBillNo || "—"} · ${fmtDate(bill.billDate)}${bill.vendor ? " · " + bill.vendor : ""}`;
+    const foot = `<tr class="total-row"><td colspan="8">Bill Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
+    return chunkTableSections(heading, phCols, phHead, rowArr, foot);
+  });
+
+  const grandSection = `
+<h2>Grand Total</h2>
+<table><tbody>
+  <tr class="total-row"><td>Total — ${bills.length} pharmacy bill${bills.length !== 1 ? "s" : ""}</td><td class="right">${fmt(grandTotal)}</td></tr>
+</tbody></table>`;
+
+  const sigBlock = `
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>`;
+
+  const body = wrapPrintDoc(
+    printHeaderHtml(logo, "PHARMACY BILLS"),
+    [infoBlock, ...billSections, grandSection, sigBlock],
+  );
+
+  openIpdPrintWindow(`Pharmacy Bills — ${patient.admissionId}`, body);
 }
 
 // ─── Medicine dropdown with search ───────────────────────────────────────────
@@ -621,7 +679,19 @@ export default function IpdPharmacy() {
       {/* Bills list */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Pharmacy Bills</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Pharmacy Bills</CardTitle>
+            {bills.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => printAllPharmacyBills(patient, bills, logoUrl)}
+              >
+                <Printer className="h-4 w-4" /> Print
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {bills.length === 0 ? (

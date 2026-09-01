@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import opdService from "@/services/opdService";
+import opdService, { DESIGNATIONS } from "@/services/opdService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, Plus } from "lucide-react";
+
+// Case-insensitive merge: keeps the first-seen casing, drops later duplicates, sorts A→Z.
+const mergeUnique = (...lists: string[][]) => {
+  const seen = new Map<string, string>();
+  for (const v of lists.flat()) {
+    const t = (v || "").trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (!seen.has(k)) seen.set(k, t);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+};
+
+const BASE_DEPARTMENTS = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE", "Administration", "Pharmacy", "Reception"];
 
 export default function AddDoctor() {
   const navigate = useNavigate();
@@ -36,8 +50,62 @@ export default function AddDoctor() {
     consultancyFees: "",
   });
 
-  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE", "Administration", "Pharmacy", "Reception"];
   const shifts = ["Morning", "Evening", "Night", "General Shift"];
+
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>(() => mergeUnique(BASE_DEPARTMENTS));
+  const [specializationOptions, setSpecializationOptions] = useState<string[]>(() => mergeUnique(DESIGNATIONS));
+
+  const [addingDept, setAddingDept] = useState(false);
+  const [newDept, setNewDept] = useState("");
+  const [addingSpec, setAddingSpec] = useState(false);
+  const [newSpec, setNewSpec] = useState("");
+
+  // Pull every department/specialization already used by an existing doctor and fold
+  // them into the dropdowns (case-insensitive dedupe).
+  useEffect(() => {
+    opdService
+      .getAllDoctors()
+      .then((r) => {
+        const docs: any[] = r.data?.data?.doctors || [];
+        setDepartmentOptions((prev) => mergeUnique(prev, docs.map((d) => d.department)));
+        setSpecializationOptions((prev) => mergeUnique(prev, docs.map((d) => d.specialization)));
+      })
+      .catch(() => {
+        /* non-fatal — fall back to the static lists */
+      });
+  }, []);
+
+  const addDepartment = () => {
+    const t = newDept.trim();
+    if (!t) return;
+    const existing = departmentOptions.find((o) => o.toLowerCase() === t.toLowerCase());
+    if (existing) {
+      setFormData((f) => ({ ...f, department: existing }));
+      toast.info("That department already exists");
+    } else {
+      setDepartmentOptions((prev) => mergeUnique(prev, [t]));
+      setFormData((f) => ({ ...f, department: t }));
+      toast.success("Department added");
+    }
+    setNewDept("");
+    setAddingDept(false);
+  };
+
+  const addSpecialization = () => {
+    const t = newSpec.trim();
+    if (!t) return;
+    const existing = specializationOptions.find((o) => o.toLowerCase() === t.toLowerCase());
+    if (existing) {
+      setFormData((f) => ({ ...f, specialization: existing }));
+      toast.info("That specialization already exists");
+    } else {
+      setSpecializationOptions((prev) => mergeUnique(prev, [t]));
+      setFormData((f) => ({ ...f, specialization: t }));
+      toast.success("Specialization added");
+    }
+    setNewSpec("");
+    setAddingSpec(false);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -146,28 +214,82 @@ export default function AddDoctor() {
 
               {/* Department */}
               <div className="space-y-2">
-                <Label>Department <span className="text-red-500">*</span></Label>
-                <Select onValueChange={(value) => handleSelectChange("department", value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Department <span className="text-red-500">*</span></Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => { setAddingDept((v) => !v); setNewDept(""); }}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    {addingDept ? "Cancel" : "Add new"}
+                  </Button>
+                </div>
+                {addingDept ? (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={newDept}
+                      onChange={(e) => setNewDept(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDepartment(); } }}
+                      placeholder="New department name"
+                    />
+                    <Button type="button" size="sm" onClick={addDepartment}>Add</Button>
+                  </div>
+                ) : (
+                  <Select value={formData.department} onValueChange={(value) => handleSelectChange("department", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentOptions.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Specialization */}
               <div className="space-y-2">
-                <Label>Specialization</Label>
-                <Input
-                  name="specialization"
-                  value={formData.specialization}
-                  onChange={handleChange}
-                  placeholder="e.g. Interventional Cardiologist"
-                />
+                <div className="flex items-center justify-between">
+                  <Label>Specialization</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => { setAddingSpec((v) => !v); setNewSpec(""); }}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    {addingSpec ? "Cancel" : "Add new"}
+                  </Button>
+                </div>
+                {addingSpec ? (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={newSpec}
+                      onChange={(e) => setNewSpec(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSpecialization(); } }}
+                      placeholder="New specialization name"
+                    />
+                    <Button type="button" size="sm" onClick={addSpecialization}>Add</Button>
+                  </div>
+                ) : (
+                  <Select value={formData.specialization} onValueChange={(value) => handleSelectChange("specialization", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Specialization" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {specializationOptions.map((spec) => (
+                        <SelectItem key={spec} value={spec}>{spec}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Shift */}

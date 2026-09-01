@@ -3,13 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Receipt } from "lucide-react";
+import { ArrowLeft, Printer, Receipt, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, printFooterHtml, doctorServiceBoxHtml } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, printHeaderHtml, doctorServiceBoxHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 interface BillingEntry {
@@ -136,14 +136,125 @@ function patientInfoBlock(patient: any) {
 </div>`;
 }
 
+// ─── Full billing print header ──────────────────────────────────────────────
+// Returns { header, intro }:
+//  - `header` = just the hospital identity box, rendered inside .print-header
+//    which goes in the doc-grid <thead> and repeats on EVERY printed page. It's
+//    short, fixed-height and flex-only (see BILL_PRINT_CSS @media print) so
+//    Chrome reliably repeats it — the tall auto-height title+grid did not.
+//  - `intro` = the bill title + two-column patient grid, rendered as the first
+//    body section, so it only appears on page 1.
+function billHeaderHtml(logo: string, billTitle: string, patient: any) {
+  const doctors = patient.doctors?.length
+    ? patient.doctors.map((d: any) => d.doctorName).join(", ")
+    : "—";
+  const ageStr = [
+    patient.ageYears  ? patient.ageYears  + "Y" : "",
+    patient.ageMonths ? patient.ageMonths + "M" : "",
+    patient.ageDays   ? patient.ageDays   + "D" : "",
+  ].filter(Boolean).join(" ") || "—";
+  const invoiceDate = new Date().toLocaleDateString("en-IN",
+    { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  const corporate = patient.tpa || patient.insuranceCo || patient.patientCategory || "—";
+  const bedInfo = patient.bedNo
+    ? `${patient.bedNo}${patient.bedCategory ? ` (${patient.bedCategory})` : ""}`
+    : "—";
+  const row = (k: string, v: string, wrap = false) =>
+    `<div class="row"><span class="k">${k}</span><span class="v${wrap ? " wrap" : ""}">${v}</span></div>`;
+  const header = `
+<div class="print-header">
+  <div class="bill-hosp">
+    <div class="logo-cell"><img src="${logo}" alt="Logo"/></div>
+    <div class="hosp-cell">
+      <div class="h-name">AROGYA MATERNITY &amp; NURSING HOME</div>
+      <div class="h-line">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
+      <div class="h-line">(Licence Under W.B. Clinical Establishment Act)</div>
+      <div class="h-reg">Regd. No: 34257492</div>
+      <div class="h-line">71, Tollygunge Circular Road, Kolkata-700053 (New Alipore, Sital Sadan Compound)</div>
+      <div class="h-line">Phone: (033) 2400-0681 / 0684 &nbsp;|&nbsp; Fax: (033) 2400-1180</div>
+    </div>
+  </div>
+</div>`;
+
+  const intro = `
+<div class="bill-title">${billTitle} Details</div>
+<div class="bill-pat">
+  <div class="col">
+    ${row("Patient Id", patient.ipdRegistrationNo || patient.admissionId)}
+    ${row("Admission No", patient.admissionId)}
+    ${row("Admitting Doctor", doctors)}
+    ${row("Patient Name", `${patient.title || ""} ${patient.name || ""}`.trim() || "—")}
+    ${row("Sex / Age", `${patient.gender || "—"} / ${ageStr}`)}
+    ${row("Address", patient.address || "—", true)}
+    ${row("Corporate", corporate)}
+  </div>
+  <div class="col">
+    ${row("Invoice No", patient.admissionId)}
+    ${row("Invoice Date", invoiceDate)}
+    ${row("Bed No", bedInfo)}
+    ${row("Admission Dt", `${fmtDate(patient.admissionDate)} ${patient.admissionTime || ""}`.trim())}
+    ${row("Discharge Dt", patient.dischargeDate
+      ? `${fmtDate(patient.dischargeDate)} ${patient.dischargeTime || ""}`.trim()
+      : "—")}
+  </div>
+</div>`;
+
+  return { header, intro };
+}
+
+// Extra CSS appended after PRINT_BASE_CSS for the detailed / summary bills.
+const BILL_PRINT_CSS = `
+  /* Full billing header (hospital box + title + patient grid) overrides the
+     compact shared .print-header. It renders in normal flow — see the @media
+     print block below for why it is NOT position:fixed here. */
+  .print-header { display: block; border-bottom: none; padding-bottom: 0; }
+  .bill-hosp { display: flex; align-items: stretch; border: 1.5px solid #111; }
+  .bill-hosp .logo-cell { display: flex; align-items: center; justify-content: center;
+    padding: 10px 18px; border-right: 1.5px solid #111; }
+  .bill-hosp .logo-cell img { width: 108px; height: 108px; object-fit: contain; }
+  .bill-hosp .hosp-cell { flex: 1; text-align: center; padding: 10px 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .bill-hosp .h-name { font-size: 16px; font-weight: bold; letter-spacing: .02em; color: #111; }
+  .bill-hosp .h-line { font-size: 9px; color: #333; margin-top: 1px; }
+  .bill-hosp .h-reg  { font-size: 9px; font-weight: bold; margin-top: 2px; color: #111; }
+  .bill-title { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: .1em;
+    text-transform: uppercase; text-decoration: underline; margin: 4px 0 12px; color: #111; }
+  .bill-pat { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px;
+    border: 1px solid #cbd1d8; padding: 9px 12px; }
+  .bill-pat .row { display: flex; font-size: 10px; padding: 1.5px 0; line-height: 1.35; }
+  .bill-pat .k { width: 108px; flex-shrink: 0; color: #555; }
+  .bill-pat .k::after { content: ":"; float: right; padding-right: 6px; }
+  .bill-pat .v { font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bill-pat .v.wrap { white-space: normal; }
+
+  /* Totals rendered as a framed summary box, right-aligned — not a bare
+     floating column with dead space beside it. */
+  .totals-box { display: block; margin-top: 22px; padding-top: 10px; border-top: 2px solid #111; }
+  .totals-inner { min-width: 300px; margin-left: auto; border: 1px solid #cbd1d8;
+    border-radius: 4px; padding: 8px 14px; }
+  /* Double the breathing room between the totals box and the signature lines. */
+  .signatures { margin-top: 80px; }
+
+  @media print {
+    /* Only the hospital box lives in .print-header now, and it sits in the
+       doc-grid <thead>. Give it an explicit height + overflow:hidden — same
+       recipe as IpdDischarge's .page-header — so Chrome can resolve its size
+       and repeat it on every page (an auto-height header did not repeat once
+       content overflowed). The header→body gap is the <thead> cell
+       padding-bottom (DOC_GRID_CSS). */
+    .print-header { position: static; height: 138px; overflow: hidden;
+      padding: 0; margin: 0 0 8px; }
+  }
+  @media screen {
+    .print-header { margin-bottom: 16px; }
+  }
+`;
+
 function printDoctorServiceSlip(patient: any, entries: BillingEntry[], logo: string) {
-  const body = `
-${printHeaderHtml(logo, "Doctor / Consultation Services")}
-<div class="print-body">
-${patientInfoBlock(patient)}
-${doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)}
-</div>
-${printFooterHtml()}`;
+  const body = wrapPrintDoc(
+    printHeaderHtml(logo, "Doctor / Consultation Services"),
+    [patientInfoBlock(patient), doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)],
+  );
   openIpdPrintWindow(`Doctor Services — ${patient.admissionId}`, body);
 }
 
@@ -220,6 +331,11 @@ function buildDetailedBillHtml(
   const doctorEntries  = entries.filter(e => e.doctorName);
   const regularEntries = entries.filter(e => !e.doctorName);
 
+  // Hide a section's Discount column when no item in that section is discounted.
+  const svcHasDisc   = regularEntries.some(e => e.unitCharge * e.quantity - e.totalCharge > 0.005);
+  const pharmHasDisc = pharmBills.some(b => b.items.some((it: any) => Number(it.discount) > 0));
+  const pharmSpan    = pharmHasDisc ? 7 : 6;
+
   const bedRows = bedAllotments.map(a => {
     const days = a.endDate && a.allotmentDate
       ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
@@ -239,8 +355,9 @@ function buildDetailedBillHtml(
     </tr>`;
   }).join("");
 
-  const svcRows = regularEntries.map((e, i) => {
+  const svcRowArr = regularEntries.map((e, i) => {
     const g = gstAmt(e.totalCharge, e.gst, e.gstType);
+    const disc = e.unitCharge * e.quantity - e.totalCharge;
     return `
     <tr>
       <td>${i + 1}</td>
@@ -248,15 +365,15 @@ function buildDetailedBillHtml(
       <td class="sub">${e.serviceGroup}</td>
       <td class="center">${e.quantity}</td>
       <td class="right">${fmt(e.unitCharge)}</td>
-      <td class="right">${(e.unitCharge * e.quantity - e.totalCharge) > 0 ? `<span style="color:#ef4444">${fmt(e.unitCharge * e.quantity - e.totalCharge)}</span>` : "—"}</td>
+      ${svcHasDisc ? `<td class="right">${disc > 0 ? `<span style="color:#ef4444">${fmt(disc)}</span>` : "—"}</td>` : ""}
       <td class="right bold">${fmt(e.totalCharge)}</td>
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
-  }).join("");
+  });
 
   const doctorBox = doctorServiceBoxHtml(doctorEntries, patient.referredBy, fmt, fmtDate);
 
-  const invRows = investigations.flatMap(inv =>
+  const invRowArr = investigations.flatMap(inv =>
     (inv.items || []).filter(it => it.description).map(it => {
       const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
       invGstTotal += g;
@@ -270,9 +387,9 @@ function buildDetailedBillHtml(
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
     })
-  ).join("");
+  );
 
-  const pharmRows = pharmBills.flatMap(bill =>
+  const pharmRowArr = pharmBills.flatMap(bill =>
     bill.items.map(it => {
       const g = gstAmt(it.netAmount, it.gst, it.gstType);
       pharmGstTotal += g;
@@ -284,12 +401,12 @@ function buildDetailedBillHtml(
       <td>${it.package || "—"}</td>
       <td class="center">${it.qty}</td>
       <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-      <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
+      ${pharmHasDisc ? `<td class="center">${it.discount || 0}${it.discountType || "%"}</td>` : ""}
       <td class="right bold">${fmt(it.netAmount)}</td>
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
     })
-  ).join("");
+  );
 
   const fallbackBedRow = !bedAllotments.length && fallbackBed ? `
     <tr>
@@ -305,11 +422,26 @@ function buildDetailedBillHtml(
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
-  return `
-${printHeaderHtml(logo, billType)}
-<div class="print-body">
-${patientInfoBlock(patient)}
-${showBedSection ? `
+  const svcHead = `<tr><th>#</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th>${svcHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Amount</th><th class="right">GST</th></tr>`;
+  const svcCols = svcHasDisc
+    ? `<colgroup><col style="width:4%"><col style="width:28%"><col style="width:18%"><col style="width:6%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:8%"></colgroup>`
+    : `<colgroup><col style="width:5%"><col style="width:33%"><col style="width:20%"><col style="width:7%"><col style="width:15%"><col style="width:12%"><col style="width:8%"></colgroup>`;
+  const svcFoot = `<tr class="total-row"><td colspan="5">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
+
+  const invHead = `<tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
+  const invFoot = `<tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
+
+  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const pharmCols = pharmHasDisc
+    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:22%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:10%"></colgroup>`
+    : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
+  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
+
+  const { header: billHeader, intro: billIntro } = billHeaderHtml(logo, billType, patient);
+  return wrapPrintDoc(billHeader, [
+    billIntro,
+    showBedSection ? `
 <h2>Bed Details</h2>
 <table>
   <thead><tr><th>From Date</th><th>To Date</th><th>Bed Category</th><th class="center">Bed No</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th><th class="right">GST</th></tr></thead>
@@ -317,50 +449,15 @@ ${showBedSection ? `
     ${bedRows || fallbackBedRow}
     <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
   </tbody>
-</table>` : ""}
-
-<h2>Services (Nursing Home Charges)</h2>
-<table>
-  <thead><tr><th>#</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th><th class="right">Discount</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${svcRows}
-    <tr class="total-row">
-      <td colspan="5">Nursing Home Charges</td>
-      <td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>
-      <td class="right">${fmt(servicesNet)}</td>
-      <td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td>
-    </tr>
-  </tbody>
-</table>
-
-${doctorBox}
-
-${investigations.length > 0 ? `
-<h2>Investigations</h2>
-<table>
-  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${invRows}
-    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>` : ""}
-
-${pharmBills.length > 0 ? `
-<h2>Pharmacy</h2>
-<table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${pharmRows}
-    ${pharmacyReturn > 0 ? `
-    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr>
-    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
-    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>` : ""}
-
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}
-</div>
-${printFooterHtml()}`;
+</table>` : "",
+    ...chunkTableSections("Services (Nursing Home Charges)", svcCols, svcHead, svcRowArr, svcFoot),
+    doctorBox,
+    ...(investigations.length > 0
+      ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
+    ...(pharmBills.length > 0
+      ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
+    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown),
+  ]);
 }
 
 function buildSummaryBillHtml(
@@ -389,6 +486,11 @@ function buildSummaryBillHtml(
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
   const doctorBox = doctorServiceBoxHtml(entries.filter(e => e.doctorName), patient.referredBy, fmt, fmtDate);
+
+  // Hide a section's Discount column when no item in that section is discounted.
+  const grpHasDisc   = Object.values(serviceGroups).some(d => d.discount > 0);
+  const pharmHasDisc = pharmBills.some((b: any) => b.items.some((it: any) => Number(it.discount) > 0));
+  const pharmSpan    = pharmHasDisc ? 7 : 6;
 
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
@@ -424,52 +526,15 @@ function buildSummaryBillHtml(
     <tr>
       <td>${grp}</td>
       <td class="right">${fmt(data.gross)}</td>
-      <td class="right" style="color:#ef4444">${data.discount > 0 ? fmt(data.discount) : "—"}</td>
+      ${grpHasDisc ? `<td class="right" style="color:#ef4444">${data.discount > 0 ? fmt(data.discount) : "—"}</td>` : ""}
       <td class="right bold">${fmt(data.net)}</td>
     </tr>`).join("");
 
-  const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
-
-  return `
-${printHeaderHtml(logo, billType)}
-<div class="print-body">
-${patientInfoBlock(patient)}
-${showBedSection ? `
-<h2>Bed Details</h2>
-<table>
-  <thead><tr><th>Bed Category</th><th>Bed No</th><th>From</th><th>To</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${bedSummaryRows}
-    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>` : ""}
-
-<h2>Services (Nursing Home Charges)</h2>
-<table>
-  <thead><tr><th>Service Group</th><th class="right">Gross</th><th class="right">Discount</th><th class="right">Net</th></tr></thead>
-  <tbody>
-    ${svcGroupRows}
-    <tr class="total-row">
-      <td>Total</td>
-      <td class="right"></td>
-      <td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>
-      <td class="right">${fmt(servicesNet)}</td>
-    </tr>
-  </tbody>
-</table>
-
-${doctorBox}
-
-${invTotal > 0 ? `
-<h2>Investigations</h2>
-<table>
-  <thead><tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${investigations.flatMap(inv =>
-      (inv.items || []).filter((it: any) => it.description).map((it: any) => {
-        const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
-        invGstTotal += g;
-        return `
+  const invRowArr = investigations.flatMap(inv =>
+    (inv.items || []).filter((it: any) => it.description).map((it: any) => {
+      const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
+      invGstTotal += g;
+      return `
       <tr>
         <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
         <td>${fmtDate(inv.reqDate)}</td>
@@ -478,22 +543,17 @@ ${invTotal > 0 ? `
         <td class="right bold">${fmt(it.netAmount || 0)}</td>
         <td class="right">${g > 0 ? fmt(g) : "—"}</td>
       </tr>`;
-      })
-    ).join("")}
-    <tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>` : ""}
+    })
+  );
+  const invHead = `<tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
+  const invFoot = `<tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
 
-${(pharmTotal > 0 || pharmacyReturn > 0) ? `
-<h2>Pharmacy</h2>
-<table>
-  <thead><tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th><th class="center">Discount</th><th class="right">Net Amt</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${pharmBills.flatMap((bill: any) =>
-      bill.items.map((it: any) => {
-        const g = gstAmt(it.netAmount, it.gst, it.gstType);
-        pharmGstTotal += g;
-        return `
+  const pharmRowArr = pharmBills.flatMap((bill: any) =>
+    bill.items.map((it: any) => {
+      const g = gstAmt(it.netAmount, it.gst, it.gstType);
+      pharmGstTotal += g;
+      return `
       <tr>
         <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
         <td>${fmtDate(bill.billDate)}</td>
@@ -501,22 +561,53 @@ ${(pharmTotal > 0 || pharmacyReturn > 0) ? `
         <td>${it.package || "—"}</td>
         <td class="center">${it.qty}</td>
         <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-        <td class="center">${it.discount || 0}${it.discountType || "%"}</td>
+        ${pharmHasDisc ? `<td class="center">${it.discount || 0}${it.discountType || "%"}</td>` : ""}
         <td class="right bold">${fmt(it.netAmount)}</td>
         <td class="right">${g > 0 ? fmt(g) : "—"}</td>
       </tr>`;
-      })
-    ).join("")}
-    ${pharmacyReturn > 0 ? `
-    <tr class="total-row"><td colspan="7">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr>
-    <tr class="total-row"><td colspan="7" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
-    <tr class="total-row"><td colspan="7">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>` : ""}
+    })
+  );
+  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const pharmCols = pharmHasDisc
+    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:22%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:10%"></colgroup>`
+    : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
+  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
-${totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown)}
-</div>
-${printFooterHtml()}`;
+  const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
+
+  const { header: billHeader, intro: billIntro } = billHeaderHtml(logo, billType, patient);
+  return wrapPrintDoc(billHeader, [
+    billIntro,
+    showBedSection ? `
+<h2>Bed Details</h2>
+<table>
+  <thead><tr><th>Bed Category</th><th>Bed No</th><th>From</th><th>To</th><th class="right">Rate/Day</th><th class="center">Days</th><th class="right">Charge</th><th class="right">GST</th></tr></thead>
+  <tbody>
+    ${bedSummaryRows}
+    <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
+  </tbody>
+</table>` : "",
+    `
+<h2>Services (Nursing Home Charges)</h2>
+<table>
+  <thead><tr><th>Service Group</th><th class="right">Gross</th>${grpHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Net</th></tr></thead>
+  <tbody>
+    ${svcGroupRows}
+    <tr class="total-row">
+      <td>Total</td>
+      <td class="right"></td>
+      ${grpHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}
+      <td class="right">${fmt(servicesNet)}</td>
+    </tr>
+  </tbody>
+</table>`,
+    doctorBox,
+    ...(invTotal > 0
+      ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
+    ...((pharmTotal > 0 || pharmacyReturn > 0)
+      ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
+    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown),
+  ]);
 }
 
 function GstBadge({ gst, gstType, onClick }: { gst?: number; gstType?: string; onClick: () => void }) {
@@ -637,6 +728,7 @@ export default function IpdBilling() {
   }, {});
 
   const doctorEntries    = entries.filter(e => e.doctorName);
+  const doctorTotal      = doctorEntries.reduce((s, e) => s + e.totalCharge, 0);
   const servicesGross    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
   const servicesDiscount = entries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
   const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
@@ -814,6 +906,7 @@ export default function IpdBilling() {
         invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         totalGst, gstBreakdown,
       ),
+      BILL_PRINT_CSS,
     );
 
   const handlePrintSummary = () =>
@@ -826,6 +919,7 @@ export default function IpdBilling() {
         servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         investigations, pharmBills, entries, totalGst, gstBreakdown,
       ),
+      BILL_PRINT_CSS,
     );
 
   return (
@@ -1087,33 +1181,61 @@ export default function IpdBilling() {
 
           {/* Doctor / Consultation Services — kept separate since these carry doctor/date/referral info */}
           {doctorEntries.length > 0 && (
-            <Card className="border-indigo-200">
-              <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base">Doctor / Consultation Services</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                  onClick={() => printDoctorServiceSlip(patient, doctorEntries, logoUrl)}
-                  title="Print all doctor / consultation services"
-                >
-                  <Printer className="h-3.5 w-3.5" /> Print
-                </Button>
+            <Card className="ring-indigo-200">
+              <CardHeader className="border-b pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Stethoscope className="h-4 w-4 text-indigo-600" />
+                  Doctor / Consultation Services
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
+                    {doctorEntries.length}
+                  </span>
+                </CardTitle>
+                <CardAction>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                    onClick={() => printDoctorServiceSlip(patient, doctorEntries, logoUrl)}
+                    title="Print all doctor / consultation services"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Print
+                  </Button>
+                </CardAction>
               </CardHeader>
-              <CardContent className="p-0 divide-y">
-                {doctorEntries.map(e => (
-                  <div key={e._id} className="px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                      <div className="text-sm font-medium">{e.serviceName}</div>
-                      <div className="text-xs text-gray-500">
-                        Doctor: <span className="font-medium text-gray-700">{e.doctorName}</span>
-                        {" · "}Date: {fmtDate(e.date)}
-                        {patient.referredBy && <> {" · "}Referred Doctor: <span className="font-medium text-gray-700">{patient.referredBy}</span></>}
-                      </div>
-                    </div>
-                    <span className="font-semibold text-indigo-700">{fmt(e.totalCharge)}</span>
-                  </div>
-                ))}
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-[11px] uppercase tracking-wide text-gray-400">
+                      <th className="px-4 py-2 text-left font-medium">Service</th>
+                      <th className="px-4 py-2 text-left font-medium">Doctor</th>
+                      <th className="px-4 py-2 text-left font-medium">Date</th>
+                      <th className="px-4 py-2 text-right font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {doctorEntries.map(e => (
+                      <tr key={e._id} className="hover:bg-indigo-50/40">
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{e.serviceName}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="text-gray-700">{e.doctorName || "—"}</div>
+                          {patient.referredBy && (
+                            <div className="text-xs text-gray-400">Ref: {patient.referredBy}</div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">{fmtDate(e.date)}</td>
+                        <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-indigo-700">{fmt(e.totalCharge)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-gray-50">
+                      <td className="px-4 py-2.5 text-sm font-medium text-gray-700" colSpan={3}>
+                        Total Consultation Charge
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-indigo-700">{fmt(doctorTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </CardContent>
             </Card>
           )}

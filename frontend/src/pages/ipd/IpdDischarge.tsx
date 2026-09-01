@@ -13,6 +13,7 @@ import ipdService, {
   todayIST, nowISTTime, toISTDateStr,
 } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
+import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS } from "@/lib/ipdPrint";
 
 function todayStr() { return todayIST(); }
 function nowTimeStr() { return nowISTTime(); }
@@ -45,9 +46,6 @@ function SectionArea({
 
 // ── Print discharge certificate (matches PDF exactly) ─────────────────────────
 function printDischargeCertificate(patient: any, form: any, logo: string) {
-  const w = window.open("", "_blank", "width=900,height=750");
-  if (!w) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
-
   const admDate = patient.admissionDate
     ? fmtDateLong(patient.admissionDate)
     : "—";
@@ -73,13 +71,11 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
       <div class="sec-body">${content.replace(/\n/g, "<br/>")}</div>`;
   }
 
-  w.document.write(`<!DOCTYPE html><html><head>
-<meta charset="utf-8"/>
-<title>Discharge Certificate — ${patient.admissionId}</title>
-<style>
+  const css = `
+  ${DOC_GRID_CSS}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:11.5px;color:#000;padding:20px 24px}
-  .page-header{display:flex;align-items:stretch;border:1.5px solid #000;margin-bottom:14px}
+  .page-header{display:flex;align-items:stretch;border:1.5px solid #000;margin-bottom:14px;height:118px;overflow:hidden}
   .logo-cell{padding:8px 12px;display:flex;align-items:center;border-right:1.5px solid #000;min-width:90px}
   .logo-cell img{width:75px;height:75px;object-fit:contain}
   .hospital-cell{flex:1;text-align:center;padding:8px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -106,24 +102,28 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   .reg-line{font-size:11px;margin-top:2px}
   .checkbox-row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px}
   .checkbox{width:12px;height:12px;border:1px solid #000;display:inline-block;margin-right:4px}
-  .checked-by{margin-top:20px;font-size:11px}
+  .checked-by{margin-top:48px;font-size:11px}
   .print-date{text-align:left;font-size:10px;color:#333;margin-top:10px}
   .page-footer{font-size:9px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:4px}
   @media print{
     body{padding:0}
-    .page-header,.page-footer{position:fixed;left:14px;right:14px;background:#fff}
-    .page-header{top:0}
-    .page-footer{bottom:0;padding-bottom:8px}
-    /* Top clearance lives entirely in @page's margin (repeats on every page)
-       rather than .cert-body's own padding, which only applies to its first
-       fragment on a page break — otherwise page 2+ loses most of that
-       headroom and content crowds the repeating header. */
-    .cert-body{padding:0 14px 40px}
-    @page{margin:170px 14px 40px}
+    /* .page-header rides in the doc-grid <thead> (repeats every page, keeps
+       content clear); the header→body gap is the <thead> cell padding-bottom
+       (DOC_GRID_CSS). .page-footer is fixed to the paper bottom and painted
+       into the strip the <tfoot> spacer reserves, so it repeats without ever
+       overlapping content. */
+    .page-header{margin-bottom:6px}
+    .page-footer{position:fixed;left:18px;right:18px;bottom:0;background:#fff;
+      height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
+    @page{margin:20px 18px}
   }
-</style>
-</head><body>
+  @media screen{
+    .doc-grid > tfoot{display:none}
+    .page-footer{margin-top:24px}
+  }
+`;
 
+  const header = `
 <div class="page-header">
   <div class="logo-cell"><img src="${logo}" alt="Logo"/></div>
   <div class="hospital-cell">
@@ -135,11 +135,10 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
     <div class="h-addr">(NEW ALIPORE, SITAL SADAN COMPOUND)</div>
     <div class="h-phone">Phone:- (033) 2400-0681 / 0684&nbsp;&nbsp;&nbsp;Fax No:- (033) 2400-1180</div>
   </div>
-</div>
+</div>`;
 
-<div class="cert-body">
+  const infoSection = `
 <div class="cert-title">DISCHARGE CERTIFICATE</div>
-
 <table class="info-table">
   <tr>
     <td class="lbl">Patient Id</td><td class="col">:</td>
@@ -178,19 +177,9 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
     <td class="lbl">Address</td><td class="col">:</td>
     <td class="val" colspan="4">${patient.address || "—"}</td>
   </tr>
-</table>
+</table>`;
 
-<div class="disc-title">DISCHARGE SUMMARY</div>
-
-${section("DISCHARGE DIAGNOSIS:-", form.dischargeDiagnosis)}
-${section("CHIEF COMPLAIN :-", form.chiefComplaint)}
-${section("ON EXAMINATION :-", form.onExamination)}
-${section("PAST HISTORY:-", form.pastHistory)}
-${section("INVESTIGATIONS:-", form.investigationSummary)}
-${section("TREATMENT / OPERATION (DETAILS) :-", form.treatmentDetails)}
-${section("DISCHARGE STATUS AND ADVICE :-", form.adviceOnDischarge)}
-
-
+  const footerBlock = `
 <div class="footer">
   <div class="sig-row">
     <div class="sig-left">
@@ -208,18 +197,26 @@ ${section("DISCHARGE STATUS AND ADVICE :-", form.adviceOnDischarge)}
     </div>
   </div>
   <div class="print-date">Print Date : ${printDate}</div>
-</div>
-</div>
+</div>`;
 
-<div class="page-footer">Arogya Maternity &amp; Nursing Home — Discharge Certificate — Computer generated document</div>
+  const body = wrapPrintDoc(
+    header,
+    [
+      infoSection,
+      `<div class="disc-title">DISCHARGE SUMMARY</div>`,
+      section("DISCHARGE DIAGNOSIS:-", form.dischargeDiagnosis),
+      section("CHIEF COMPLAIN :-", form.chiefComplaint),
+      section("ON EXAMINATION :-", form.onExamination),
+      section("PAST HISTORY:-", form.pastHistory),
+      section("INVESTIGATIONS:-", form.investigationSummary),
+      section("TREATMENT / OPERATION (DETAILS) :-", form.treatmentDetails),
+      section("DISCHARGE STATUS AND ADVICE :-", form.adviceOnDischarge),
+      footerBlock,
+    ],
+    `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Discharge Certificate — Computer generated document</div>`,
+  );
 
-<script>
-  window.onload=function(){window.focus();window.print();};
-  window.onafterprint=function(){window.close();};
-  setTimeout(function(){window.close();},60000);
-<\/script>
-</body></html>`);
-  w.document.close();
+  printViaHiddenIframe(`Discharge Certificate — ${patient.admissionId}`, css, body);
 }
 
 export default function IpdDischarge() {
