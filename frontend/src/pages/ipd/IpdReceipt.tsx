@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST } from "@/services/ipdService";
@@ -75,8 +75,12 @@ const PRINT_CSS = `
     .print-header,.page-footer{position:fixed;left:20px;right:20px;background:#fff}
     .print-header{top:0;padding-top:12px}
     .page-footer{bottom:0;padding-bottom:8px}
-    .print-body{padding:104px 20px 36px}
-    @page{margin:98px 20px 32px}
+    /* Top clearance lives entirely in @page's margin (repeats on every page)
+       rather than .print-body's own padding, which only applies to its first
+       fragment on a page break — otherwise page 2+ loses most of that
+       headroom and content crowds the repeating header. */
+    .print-body{padding:0 20px 36px}
+    @page{margin:130px 20px 32px}
   }
 `;
 
@@ -350,6 +354,7 @@ export default function IpdReceipt() {
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [showForm,      setShowForm]      = useState(false);
+  const [editingId,     setEditingId]     = useState<string | null>(null);
   const [form,          setForm]          = useState({ ...BLANK });
   const [liveNow,       setLiveNow]       = useState(() => new Date());
 
@@ -451,12 +456,25 @@ export default function IpdReceipt() {
     if (!form.receiptAmount || Number(form.receiptAmount) <= 0)
       return toast.error("Enter a valid receipt amount");
     if (!form.receiptDate) return toast.error("Receipt date is required");
-    if (!(await confirm({ title: "Save receipt?", description: "This will record a new payment receipt for this patient.", confirmText: "Yes, save" }))) return;
+    const isEdit = !!editingId;
+    if (!(await confirm({
+      title: isEdit ? "Update receipt?" : "Save receipt?",
+      description: isEdit
+        ? "This will update the existing payment receipt for this patient."
+        : "This will record a new payment receipt for this patient.",
+      confirmText: isEdit ? "Yes, update" : "Yes, save",
+    }))) return;
     setSaving(true);
     try {
-      await ipdService.createReceipt(id!, form);
-      toast.success("Receipt saved");
+      if (isEdit) {
+        await ipdService.updateReceipt(editingId!, form);
+        toast.success("Receipt updated");
+      } else {
+        await ipdService.createReceipt(id!, form);
+        toast.success("Receipt saved");
+      }
       setShowForm(false);
+      setEditingId(null);
       setForm({ ...BLANK });
       const rr = await ipdService.getReceipts(id!);
       setReceipts(rr.data.data.receipts || []);
@@ -465,6 +483,29 @@ export default function IpdReceipt() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEdit = (r: ReceiptEntry) => {
+    setEditingId(r._id);
+    setForm({
+      receiptDate:   r.receiptDate ? new Date(r.receiptDate).toISOString().slice(0, 10) : todayStr(),
+      receiptAmount: r.receiptAmount || 0,
+      receiptMode:   r.receiptMode || "CASH",
+      remarks:       r.remarks || "",
+      tds:           r.tds || 0,
+      disallowed:    r.disallowed || 0,
+      refund:        r.refund || 0,
+      chequeNo:      r.chequeNo || "",
+      chequeRefNo:   r.chequeRefNo || "",
+      transactionId: r.transactionId || "",
+    });
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({ ...BLANK });
   };
 
   const handleDelete = async (receiptId: string) => {
@@ -477,6 +518,7 @@ export default function IpdReceipt() {
     try {
       await ipdService.deleteReceipt(receiptId);
       setReceipts(prev => prev.filter(r => r._id !== receiptId));
+      if (editingId === receiptId) handleCancelForm();
       toast.success("Receipt deleted");
     } catch {
       toast.error("Failed to delete");
@@ -521,7 +563,7 @@ export default function IpdReceipt() {
             </Button>
           )}
           {!showForm && (
-            <Button onClick={() => setShowForm(true)} className="bg-green-600 hover:bg-green-700 gap-2">
+            <Button onClick={() => { setEditingId(null); setForm({ ...BLANK }); setShowForm(true); }} className="bg-green-600 hover:bg-green-700 gap-2">
               <Plus className="h-4 w-4" /> New Receipt
             </Button>
           )}
@@ -593,7 +635,8 @@ export default function IpdReceipt() {
         <Card className="border-green-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-green-600" /> New Receipt
+              {editingId ? <Pencil className="h-4 w-4 text-green-600" /> : <Receipt className="h-4 w-4 text-green-600" />}
+              {editingId ? "Edit Receipt" : "New Receipt"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -717,11 +760,11 @@ export default function IpdReceipt() {
             )}
 
             <div className="flex gap-2 justify-end pt-1">
-              <Button variant="outline" onClick={() => { setShowForm(false); setForm({ ...BLANK }); }}>
+              <Button variant="outline" onClick={handleCancelForm}>
                 Cancel
               </Button>
               <Button onClick={handleSubmit} disabled={saving} className="bg-green-600 hover:bg-green-700">
-                {saving ? "Saving…" : "Save Receipt"}
+                {saving ? "Saving…" : editingId ? "Update Receipt" : "Save Receipt"}
               </Button>
             </div>
           </CardContent>
@@ -782,6 +825,14 @@ export default function IpdReceipt() {
                           onClick={() => printReceipt(patient, r, totalReceived, logoUrl)}
                         >
                           <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-amber-500 hover:text-amber-700"
+                          onClick={() => handleEdit(r)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

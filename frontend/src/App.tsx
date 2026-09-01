@@ -30,6 +30,7 @@ import IpdReceipt             from "./pages/ipd/IpdReceipt";
 import IpdPharmacy            from "./pages/ipd/IpdPharmacy";
 import InvestigationVendors   from "./pages/ipd/InvestigationVendors";
 import InvestigationItems     from "./pages/ipd/InvestigationItems";
+import ServiceCatalogueManager from "./pages/ipd/ServiceCatalogueManager";
 import Pharmacy         from "./pages/pharmacy/Pharmacy";
 import Operations       from "./pages/operations/Operations";
 
@@ -93,6 +94,7 @@ function App() {
             <Route path="ipd/pharmacy/:id"      element={<RoleRoute allowed={["admin"]}><IpdPharmacy /></RoleRoute>} />
             <Route path="ipd/vendors"           element={<RoleRoute allowed={["admin"]}><InvestigationVendors /></RoleRoute>} />
             <Route path="ipd/investigation-items" element={<RoleRoute allowed={["admin"]}><InvestigationItems /></RoleRoute>} />
+            <Route path="ipd/service-catalogue" element={<RoleRoute allowed={["admin"]}><ServiceCatalogueManager /></RoleRoute>} />
 
             {/* Pharmacy */}
             <Route path="pharmacy" element={<RoleRoute allowed={["admin","pharmacist","doctor","nurse"]}><Pharmacy /></RoleRoute>} />

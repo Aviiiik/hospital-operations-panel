@@ -51,8 +51,13 @@ export const PRINT_BASE_CSS = `
     .print-header, .print-footer { position: fixed; left: 24px; right: 24px; background: #fff; }
     .print-header { top: 0; padding-top: 16px; }
     .print-footer { bottom: 0; padding-bottom: 10px; }
-    .print-body { padding: 118px 24px 46px; }
-    @page { margin: 112px 24px 44px; }
+    /* Top clearance lives entirely in @page's margin (repeats identically on
+       every printed page) rather than .print-body's own padding — a block's
+       top padding only applies to its first fragment when it spans a page
+       break, so page 2+ would otherwise end up with far less headroom than
+       page 1 and its content would butt right up against the header. */
+    .print-body { padding: 0 24px 46px; }
+    @page { margin: 140px 24px 44px; }
   }
   @media screen {
     .print-body { padding: 16px 0 0; }

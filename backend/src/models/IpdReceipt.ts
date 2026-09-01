@@ -6,7 +6,7 @@ const ipdReceiptSchema = new mongoose.Schema({
   receiptNo:     { type: String, required: true, unique: true },
   receiptDate:   { type: Date, required: true },
   receiptAmount: { type: Number, required: true, default: 0 },
-  receiptMode:   { type: String, enum: ["CASH", "CHEQUE", "NEFT", "UPI", "CARD", "DD"], default: "CASH" },
+  receiptMode:   { type: String, enum: ["CASH", "CHEQUE", "NEFT", "UPI", "CARD-DR/CR", "DD"], default: "CASH" },
   remarks:       { type: String },
   tds:           { type: Number, default: 0 },
   disallowed:    { type: Number, default: 0 },

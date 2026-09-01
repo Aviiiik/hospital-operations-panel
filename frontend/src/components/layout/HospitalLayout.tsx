@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Bed, Pill,
   DollarSign, Settings, LogOut, Menu, X, Bell,
   Calendar, UserPlus, UserCheck, Stethoscope, ChevronDown, FileText, KeyRound, UserCog,
-  Building2, FlaskConical,
+  Building2, FlaskConical, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -46,6 +46,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
       { title: "Search Patient",     path: "/ipd/search",               icon: UserCheck,    roles: ["admin", "receptionist"] },
       { title: "Vendors",            path: "/ipd/vendors",              icon: Building2,    roles: ["admin"] },
       { title: "Investigation Items",path: "/ipd/investigation-items",  icon: FlaskConical, roles: ["admin"] },
+      { title: "Service Catalogue",  path: "/ipd/service-catalogue",    icon: ClipboardList,roles: ["admin"] },
     ],
   },
   { title: "Pharmacy",  icon: Pill,         path: "/pharmacy",   roles: ["admin", "pharmacist", "doctor", "nurse"] },

@@ -114,8 +114,12 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
     .page-header,.page-footer{position:fixed;left:14px;right:14px;background:#fff}
     .page-header{top:0}
     .page-footer{bottom:0;padding-bottom:8px}
-    .cert-body{padding:150px 14px 40px}
-    @page{margin:144px 14px 40px}
+    /* Top clearance lives entirely in @page's margin (repeats on every page)
+       rather than .cert-body's own padding, which only applies to its first
+       fragment on a page break — otherwise page 2+ loses most of that
+       headroom and content crowds the repeating header. */
+    .cert-body{padding:0 14px 40px}
+    @page{margin:170px 14px 40px}
   }
 </style>
 </head><body>
