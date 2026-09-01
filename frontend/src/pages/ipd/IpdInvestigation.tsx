@@ -15,7 +15,7 @@ import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp, Print
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationVendor, InvestigationItem, todayIST, nowISTTime } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, hospitalHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,8 +128,8 @@ function invRequisitionSections(patient: any, inv: Investigation, pageBreakBefor
 // ─── Print a single investigation requisition ─────────────────────────────────
 function printInvestigationRequisition(patient: any, inv: Investigation, logo: string) {
   const body = wrapPrintDoc(
-    printHeaderHtml(logo, "INVESTIGATION REQUISITION"),
-    invRequisitionSections(patient, inv),
+    hospitalHeaderHtml(logo),
+    [`<div class="doc-title">Investigation Requisition</div>`, ...invRequisitionSections(patient, inv)],
   );
   openIpdPrintWindow(`Investigation Requisition — ${inv.reqNo}`, body);
 }
@@ -144,8 +144,8 @@ function printAllInvestigationRequisitions(patient: any, invs: Investigation[], 
     invRequisitionSections(patient, inv, idx > 0),
   );
   const body = wrapPrintDoc(
-    printHeaderHtml(logo, "INVESTIGATION REQUISITIONS"),
-    sections,
+    hospitalHeaderHtml(logo),
+    [`<div class="doc-title">Investigation Requisitions</div>`, ...sections],
   );
   openIpdPrintWindow(`Investigation Requisitions — ${patient.admissionId}`, body);
 }

@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCc
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { todayIST } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, hospitalHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -123,8 +123,9 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
 </div>`;
 
   const body = wrapPrintDoc(
-    printHeaderHtml(logo, "PHARMACY BILL"),
+    hospitalHeaderHtml(logo),
     [
+      `<div class="doc-title">Pharmacy Bill</div>`,
       infoBlock,
       ...chunkTableSections("Items", phCols, phHead, rowArr, phFoot),
       sigBlock,
@@ -182,8 +183,8 @@ function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
 </div>`;
 
   const body = wrapPrintDoc(
-    printHeaderHtml(logo, "PHARMACY BILLS"),
-    [infoBlock, ...billSections, grandSection, sigBlock],
+    hospitalHeaderHtml(logo),
+    [`<div class="doc-title">Pharmacy Bills</div>`, infoBlock, ...billSections, grandSection, sigBlock],
   );
 
   openIpdPrintWindow(`Pharmacy Bills — ${patient.admissionId}`, body);

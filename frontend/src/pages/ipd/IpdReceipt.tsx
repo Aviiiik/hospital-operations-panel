@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
-import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS } from "@/lib/ipdPrint";
+import { printViaHiddenIframe, wrapPrintDoc, hospitalHeaderHtml, DOC_GRID_CSS, HOSPITAL_HEADER_CSS } from "@/lib/ipdPrint";
 
 function todayStr() { return todayIST(); }
 function fmt(n: number) {
@@ -56,6 +56,7 @@ function toWords(n: number): string {
 
 const PRINT_CSS = `
   ${DOC_GRID_CSS}
+  ${HOSPITAL_HEADER_CSS}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:12px;color:#333;padding:24px}
   .title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:14px;letter-spacing:0.05em}
@@ -130,25 +131,10 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
     return parts.join(" | ");
   })();
   const css = `${PRINT_CSS}
-  .print-header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #374151;padding-bottom:10px}
-  img{height:52px;object-fit:contain}
-  .hosp{font-size:14px;font-weight:bold;color:#b91c1c}.sub{font-size:10px;color:#6b7280;margin-top:2px}
-  h2{font-size:18px;font-weight:bold;color:#b91c1c;text-align:right}
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:12px}
   .il{font-size:10px;color:#6b7280}.iv{font-weight:600;font-size:12px}
   .total-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
   .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}`;
-
-  const header = `
-<div class="print-header">
-  <div style="display:flex;align-items:center;gap:12px">
-    <img src="${logo}" alt="Logo"/>
-    <div><div class="hosp">AROGYA MATERNITY &amp; NURSING HOME</div>
-    <div class="sub">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
-    <div class="sub">71, Tollygunge Circular Road, Kolkata-700053</div></div>
-  </div>
-  <h2>RECEIPT</h2>
-</div>`;
 
   const detailSection = `
 <div class="info-grid">
@@ -197,7 +183,8 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   <div style="text-align:right"><div style="font-size:11px;margin-bottom:20px">E &amp; O.E.</div><div class="sig-line" style="margin-left:auto">Authorised Signatory</div></div>
 </div>`;
 
-  const body = wrapPrintDoc(header, [detailSection, signSection],
+  const body = wrapPrintDoc(hospitalHeaderHtml(logo),
+    [`<div class="doc-title">Receipt</div>`, detailSection, signSection],
     `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated receipt</div>`);
 
   printViaHiddenIframe(`Receipt ${receipt.receiptNo}`, css, body);
@@ -273,16 +260,7 @@ function printAllReceipts(
     </tr>`;
   }).join("");
 
-  const css = `${PRINT_CSS}
-  .print-header{text-align:center;border-bottom:2px solid #374151;padding-bottom:8px;
-                display:flex;flex-direction:column;align-items:center;justify-content:center}`;
-
-  const header = `
-<div class="print-header">
-  <img src="${logo}" alt="Logo" style="height:56px;object-fit:contain"/>
-  <div style="font-size:15px;font-weight:bold;color:#b91c1c;margin-top:4px">AROGYA MATERNITY &amp; NURSING HOME</div>
-  <div style="font-size:10px;color:#6b7280">(A Unit of R.P. Medical Foundation Pvt. Ltd.) &nbsp;|&nbsp; 71, Tollygunge Circular Road, Kolkata-700053</div>
-</div>`;
+  const css = PRINT_CSS;
 
   const metaSection = `
 <div class="title">MONEY RECEIPT</div>
@@ -331,7 +309,7 @@ function printAllReceipts(
   <div><div class="sig-line">Signature</div></div>
 </div>`;
 
-  const body = wrapPrintDoc(header, [metaSection, tableSection, signSection],
+  const body = wrapPrintDoc(hospitalHeaderHtml(logo), [metaSection, tableSection, signSection],
     `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated document</div>`);
 
   printViaHiddenIframe(`Money Receipt — ${patient.admissionId}`, css, body);
