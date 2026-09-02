@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCcw, Printer } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCcw, Printer, BadgePercent } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { todayIST } from "@/services/ipdService";
@@ -41,6 +41,8 @@ interface PharmBill {
   vendorBillNo: string;
   items: PharmItem[];
   totalAmount: number;
+  billDiscount?: number;
+  billDiscountType?: "%" | "₹";
   netAmount: number;
 }
 
@@ -75,6 +77,17 @@ function fmt(n: number) {
 function fmtDate(d: string | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+// Sum of item net amounts (the bill subtotal before any bill-level discount).
+function itemsNetOf(bill: PharmBill) {
+  return bill.items.reduce((s, it) => s + (Number(it.netAmount) || 0), 0);
+}
+// The ₹ value a bill-level discount removes from that subtotal.
+function billDiscountCut(bill: PharmBill) {
+  const disc = Number(bill.billDiscount) || 0;
+  if (disc <= 0) return 0;
+  const sub = itemsNetOf(bill);
+  return bill.billDiscountType === "%" ? sub * disc / 100 : disc;
 }
 function calcItem(it: PharmItem): PharmItem {
   const mrp  = parseFloat(it.mrp)  || 0;
@@ -112,9 +125,14 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
   <div><div class="info-label">Referred By</div><div class="info-val">${bill.referredBy || "—"}</div></div>
 </div>`;
 
-  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr>`;
-  const phCols = `<colgroup><col style="width:5%"><col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:16%"></colgroup>`;
-  const phFoot = `<tr class="total-row"><td colspan="8">Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
+  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center" style="white-space:nowrap">Discount</th><th class="right">Net Amt</th></tr>`;
+  const phCols = `<colgroup><col style="width:5%"><col style="width:19%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:11%"><col style="width:16%"></colgroup>`;
+  const billDisc = billDiscountCut(bill);
+  const phFoot = (billDisc > 0
+    ? `<tr><td colspan="8" class="right">Subtotal</td><td class="right">${fmt(itemsNetOf(bill))}</td></tr>`
+      + `<tr><td colspan="8" class="right">Discount${bill.billDiscountType === "%" ? ` (${bill.billDiscount}%)` : ""}</td><td class="right">- ${fmt(billDisc)}</td></tr>`
+    : "")
+    + `<tr class="total-row"><td colspan="8">Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
 
   const sigBlock = `
 <div class="signatures">
@@ -139,8 +157,8 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
 function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
   if (!bills.length) { toast.error("No pharmacy bills to print"); return; }
 
-  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center">Discount</th><th class="right">Net Amt</th></tr>`;
-  const phCols = `<colgroup><col style="width:5%"><col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:16%"></colgroup>`;
+  const phHead = `<tr><th class="center">#</th><th>Item</th><th>Package</th><th>Batch</th><th>Expiry</th><th class="right">MRP</th><th class="center">Qty</th><th class="center" style="white-space:nowrap">Discount</th><th class="right">Net Amt</th></tr>`;
+  const phCols = `<colgroup><col style="width:5%"><col style="width:19%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:11%"><col style="width:16%"></colgroup>`;
 
   const grandTotal = bills.reduce((s, b) => s + (b.netAmount || 0), 0);
 
@@ -166,7 +184,12 @@ function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
       <td class="right bold">${fmt(it.netAmount)}</td>
     </tr>`);
     const heading = `Bill ${bill.vendorBillNo || "—"} · ${fmtDate(bill.billDate)}${bill.vendor ? " · " + bill.vendor : ""}`;
-    const foot = `<tr class="total-row"><td colspan="8">Bill Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
+    const bDisc = billDiscountCut(bill);
+    const foot = (bDisc > 0
+      ? `<tr><td colspan="8" class="right">Subtotal</td><td class="right">${fmt(itemsNetOf(bill))}</td></tr>`
+        + `<tr><td colspan="8" class="right">Discount${bill.billDiscountType === "%" ? ` (${bill.billDiscount}%)` : ""}</td><td class="right">- ${fmt(bDisc)}</td></tr>`
+      : "")
+      + `<tr class="total-row"><td colspan="8">Bill Total</td><td class="right">${fmt(bill.netAmount)}</td></tr>`;
     return chunkTableSections(heading, phCols, phHead, rowArr, foot);
   });
 
@@ -297,6 +320,12 @@ export default function IpdPharmacy() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnAmount, setReturnAmount] = useState("");
   const [savingReturn, setSavingReturn] = useState(false);
+
+  // Bill-level discount modal (tied to one pharmacy bill)
+  const [discountBill, setDiscountBill] = useState<PharmBill | null>(null);
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountType, setDiscountType] = useState<"%" | "₹">("₹");
+  const [savingDiscount, setSavingDiscount] = useState(false);
 
   // New bill form
   const [billDate,     setBillDate]     = useState(todayStr());
@@ -443,6 +472,34 @@ export default function IpdPharmacy() {
       toast.error(err.response?.data?.message || "Failed to record return");
     } finally {
       setSavingReturn(false);
+    }
+  };
+
+  const openDiscount = (bill: PharmBill) => {
+    setDiscountBill(bill);
+    setDiscountValue(bill.billDiscount ? String(bill.billDiscount) : "");
+    setDiscountType(bill.billDiscountType === "%" ? "%" : "₹");
+  };
+
+  const handleSaveDiscount = async () => {
+    if (!discountBill) return;
+    const value = parseFloat(discountValue) || 0;
+    if (value < 0) return toast.error("Discount cannot be negative");
+    if (discountType === "%" && value > 100) return toast.error("Percentage discount cannot exceed 100%");
+    setSavingDiscount(true);
+    try {
+      await ipdService.updatePharmacyBill(discountBill._id, {
+        billDiscount: value,
+        billDiscountType: discountType,
+      });
+      const br = await ipdService.getPharmacyBills(id!);
+      setBills(br.data.data.bills || []);
+      setDiscountBill(null);
+      toast.success(value > 0 ? "Discount applied" : "Discount removed");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to apply discount");
+    } finally {
+      setSavingDiscount(false);
     }
   };
 
@@ -718,7 +775,19 @@ export default function IpdPharmacy() {
                     <span className="text-xs text-gray-400">{bill.items.length} item{bill.items.length !== 1 ? "s" : ""}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-semibold text-green-700">{fmt(bill.netAmount)}</span>
+                    <div className="text-right">
+                      <span className="font-semibold text-green-700">{fmt(bill.netAmount)}</span>
+                      {billDiscountCut(bill) > 0 && (
+                        <span className="text-xs text-red-500 block">
+                          (-) Discount{bill.billDiscountType === "%" ? ` ${bill.billDiscount}%` : ""}: {fmt(billDiscountCut(bill))}
+                        </span>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="sm"
+                      className="h-7 gap-1 px-2 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                      onClick={e => { e.stopPropagation(); openDiscount(bill); }}>
+                      <BadgePercent className="h-3.5 w-3.5" /> Discount
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-400 hover:text-blue-600"
                       onClick={e => { e.stopPropagation(); printPharmacyBill(patient, bill, logoUrl); }}>
                       <Printer className="h-3.5 w-3.5" />
@@ -767,6 +836,24 @@ export default function IpdPharmacy() {
                           </tr>
                         ))}
                       </tbody>
+                      {billDiscountCut(bill) > 0 && (
+                        <tfoot>
+                          <tr className="border-t border-gray-200">
+                            <td colSpan={7} className="px-4 py-1.5 text-right text-gray-500">Subtotal</td>
+                            <td className="px-4 py-1.5 text-right">{fmt(itemsNetOf(bill))}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={7} className="px-4 py-1.5 text-right text-red-500">
+                              Discount{bill.billDiscountType === "%" ? ` (${bill.billDiscount}%)` : ""}
+                            </td>
+                            <td className="px-4 py-1.5 text-right text-red-500">- {fmt(billDiscountCut(bill))}</td>
+                          </tr>
+                          <tr className="border-t border-gray-200">
+                            <td colSpan={7} className="px-4 py-1.5 text-right font-semibold">Net Total</td>
+                            <td className="px-4 py-1.5 text-right font-bold text-green-700">{fmt(bill.netAmount)}</td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 )}
@@ -891,6 +978,62 @@ export default function IpdPharmacy() {
             <Button variant="outline" onClick={() => { setShowReturnModal(false); setReturnAmount(""); }}>Cancel</Button>
             <Button onClick={handleReturnSubmit} disabled={savingReturn} className="bg-amber-600 hover:bg-amber-700">
               {savingReturn ? "Saving…" : "Deduct from Bill"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bill Discount Modal */}
+      <Dialog open={!!discountBill} onOpenChange={open => { if (!open) setDiscountBill(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgePercent className="h-4 w-4 text-amber-500" /> Bill Discount
+            </DialogTitle>
+          </DialogHeader>
+          {discountBill && (
+            <div className="space-y-3 py-2">
+              <div className="text-sm text-gray-500">
+                Bill <span className="font-mono font-semibold text-gray-700">{discountBill.vendorBillNo || "—"}</span>
+                {" · "}Subtotal <span className="font-semibold text-gray-700">{fmt(itemsNetOf(discountBill))}</span>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Discount</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    autoFocus
+                    value={discountValue}
+                    onChange={e => setDiscountValue(e.target.value)}
+                    className="h-9 text-sm"
+                    placeholder="0.00"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType(t => (t === "%" ? "₹" : "%"))}
+                    className="h-9 w-11 shrink-0 rounded border border-gray-300 text-sm font-semibold hover:bg-gray-100 bg-white"
+                  >
+                    {discountType}
+                  </button>
+                </div>
+              </div>
+              <div className="text-sm">
+                Net after discount:{" "}
+                <span className="font-bold text-green-700">
+                  {fmt(Math.max(0, itemsNetOf(discountBill) - (
+                    discountType === "%"
+                      ? itemsNetOf(discountBill) * (parseFloat(discountValue) || 0) / 100
+                      : (parseFloat(discountValue) || 0)
+                  )))}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">Set to 0 to remove the discount.</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscountBill(null)}>Cancel</Button>
+            <Button onClick={handleSaveDiscount} disabled={savingDiscount} className="bg-amber-600 hover:bg-amber-700">
+              {savingDiscount ? "Saving…" : "Apply Discount"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, Printer, Receipt, Stethoscope } from "lucide-react";
+import { ArrowLeft, Printer, Receipt, Stethoscope, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr } from "@/services/ipdService";
+import ipdService, { BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
 import { openIpdPrintWindow, printHeaderHtml, doctorServiceBoxHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
@@ -104,6 +105,13 @@ function fmtDate(d: string | undefined) {
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Escape user free-text before dropping it into a print HTML string.
+function esc(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/\n/g, "<br>");
+}
+
 function gstAmt(base: number, gst?: number, gstType?: string): number {
   const g = Number(gst) || 0;
   if (g <= 0) return 0;
@@ -114,6 +122,15 @@ function gstLabel(gst?: number, gstType?: string): string {
   const g = Number(gst) || 0;
   if (g <= 0) return "";
   return gstType === "flat" ? fmt(g) : `${g}%`;
+}
+
+// One plain totals row per billing section that has a discount (Services /
+// Investigation / Pharmacy, via buildDiscountSections in ipdService) — styled
+// like the other rows above Net Total. No header, no total, no footnote.
+function discountSummaryHtml(discountSections: IpdDiscountSection[]): string {
+  return discountSections.map(sec =>
+    `<div class="totals-row" style="color:#ef4444"><span>(-)${sec.section} Discount</span><span>${fmt(sec.total)}</span></div>`,
+  ).join("");
 }
 
 function patientInfoBlock(patient: any) {
@@ -232,6 +249,11 @@ const BILL_PRINT_CSS = `
   .totals-box { display: block; margin-top: 22px; padding-top: 10px; border-top: 2px solid #111; }
   .totals-inner { min-width: 300px; margin-left: auto; border: 1px solid #cbd1d8;
     border-radius: 4px; padding: 8px 14px; }
+  /* Free-text bill comment, printed full-width under the totals box. */
+  .bill-comment { margin-top: 16px; border: 1px solid #cbd1d8; border-radius: 4px;
+    padding: 7px 12px; font-size: 10px; line-height: 1.45; color: #111; white-space: pre-wrap; }
+  .bill-comment .bill-comment-label { font-weight: bold; color: #555; }
+
   /* Double the breathing room between the totals box and the signature lines. */
   .signatures { margin-top: 80px; }
 
@@ -263,6 +285,9 @@ function totalsBlock(
   servicesDiscount: number, billDiscAmt: number, grandTotal: number,
   receiptSummary: ReceiptSummary | null,
   totalGst: number = 0, gstBreakdown: { label: string; amount: number }[] = [],
+  discountSections: IpdDiscountSection[] = [],
+  billComment: string = "",
+  hideBillDiscount: boolean = false,
 ) {
   const totalPaid  = receiptSummary?.totalReceived ?? 0;
   const totalTds   = receiptSummary?.totalTds ?? 0;
@@ -277,10 +302,10 @@ function totalsBlock(
     ${invTotal > 0 ? `<div class="totals-row"><span>Investigations</span><span class="bold">${fmt(invTotal)}</span></div>` : ""}
     ${pharmTotal > 0 ? `<div class="totals-row"><span>Pharmacy</span><span class="bold">${fmt(pharmTotal)}</span></div>` : ""}
     <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + invTotal + pharmTotal)}</span></div>
-    ${servicesDiscount > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Service Discount</span><span>${fmt(servicesDiscount)}</span></div>` : ""}
+    ${discountSummaryHtml(discountSections)}
     <div class="totals-sep"></div>
     <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(preDisc)}</span></div>
-    ${billDiscAmt > 0 ? `<div class="totals-row" style="color:#ef4444"><span>(-)Bill Discount</span><span>${fmt(billDiscAmt)}</span></div>` : ""}
+    ${billDiscAmt > 0 && !hideBillDiscount ? `<div class="totals-row" style="color:#ef4444"><span>(-)Bill Discount</span><span>${fmt(billDiscAmt)}</span></div>` : ""}
     ${totalGst > 0 ? `
     <div class="totals-row"><span>(+) GST</span><span class="bold">${fmt(totalGst)}</span></div>
     <div style="font-size:9px;color:#6b7280;line-height:1.5;padding:0 0 4px 8px">
@@ -293,6 +318,7 @@ function totalsBlock(
     <div class="totals-grand"><span>Payable By Patient</span><span>${fmt(netDue)}</span></div>
   </div>
 </div>
+${billComment.trim() ? `<div class="bill-comment"><span class="bill-comment-label">Comment:</span> ${esc(billComment.trim())}</div>` : ""}
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
@@ -300,6 +326,32 @@ function totalsBlock(
 <div class="signatures" style="margin-top:40px">
   <div><div class="sig-line" style="width:200px">Prepared By</div></div>
 </div>`;
+}
+
+// Per-section "hide the discount from the printed bill" flags. Toggled on screen
+// (see DiscountToggle); the on-screen tables are never affected, only the print.
+export type DiscPrintHidden = {
+  services: boolean;
+  investigations: boolean;
+  pharmacy: boolean;
+  summary: boolean;
+};
+const NO_DISC_HIDDEN: DiscPrintHidden = { services: false, investigations: false, pharmacy: false, summary: false };
+
+// Drops the discount rows the caller asked to hide from the Bill Summary block.
+// `summary` hides every row; a section flag hides just that section's row. This
+// is disclosure only — no total changes (Net Total is printed directly).
+function visibleDiscountSections(
+  entries: BillingEntry[], investigations: Investigation[], pharmBills: PharmBill[],
+  hidden: DiscPrintHidden,
+): IpdDiscountSection[] {
+  if (hidden.summary) return [];
+  return buildDiscountSections(entries, investigations, pharmBills).filter(s => {
+    if (s.section === "Services" && hidden.services) return false;
+    if (s.section === "Investigation" && hidden.investigations) return false;
+    if (s.section === "Pharmacy" && hidden.pharmacy) return false;
+    return true;
+  });
 }
 
 function buildDetailedBillHtml(
@@ -324,6 +376,7 @@ function buildDetailedBillHtml(
   logo: string,
   totalGst: number = 0,
   gstBreakdown: { label: string; amount: number }[] = [],
+  discHidden: DiscPrintHidden = NO_DISC_HIDDEN,
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
   const svcGstTotal = entries.reduce((s, e) => s + gstAmt(e.totalCharge, e.gst, e.gstType), 0);
@@ -331,9 +384,10 @@ function buildDetailedBillHtml(
   const doctorEntries  = entries.filter(e => e.doctorName);
   const regularEntries = entries.filter(e => !e.doctorName);
 
-  // Hide a section's Discount column when no item in that section is discounted.
-  const svcHasDisc   = regularEntries.some(e => e.unitCharge * e.quantity - e.totalCharge > 0.005);
-  const pharmHasDisc = pharmBills.some(b => b.items.some((it: any) => Number(it.discount) > 0));
+  // Hide a section's Discount column when it was toggled off for print, or when
+  // no item in that section is discounted.
+  const svcHasDisc   = !discHidden.services && regularEntries.some(e => e.unitCharge * e.quantity - e.totalCharge > 0.005);
+  const pharmHasDisc = !discHidden.pharmacy && pharmBills.some(b => b.items.some((it: any) => Number(it.discount) > 0));
   const pharmSpan    = pharmHasDisc ? 7 : 6;
 
   const bedRows = bedAllotments.map(a => {
@@ -432,9 +486,9 @@ function buildDetailedBillHtml(
   const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
   const invFoot = `<tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
 
-  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center" style="white-space:nowrap">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
   const pharmCols = pharmHasDisc
-    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:22%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:10%"></colgroup>`
+    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:19%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:10%"></colgroup>`
     : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
   const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
@@ -456,7 +510,8 @@ function buildDetailedBillHtml(
       ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
     ...(pharmBills.length > 0
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
-    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown),
+    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
+      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary),
   ]);
 }
 
@@ -483,13 +538,15 @@ function buildSummaryBillHtml(
   entries: BillingEntry[],
   totalGst: number = 0,
   gstBreakdown: { label: string; amount: number }[] = [],
+  discHidden: DiscPrintHidden = NO_DISC_HIDDEN,
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
   const doctorBox = doctorServiceBoxHtml(entries.filter(e => e.doctorName), patient.referredBy, fmt, fmtDate);
 
-  // Hide a section's Discount column when no item in that section is discounted.
-  const grpHasDisc   = Object.values(serviceGroups).some(d => d.discount > 0);
-  const pharmHasDisc = pharmBills.some((b: any) => b.items.some((it: any) => Number(it.discount) > 0));
+  // Hide a section's Discount column when it was toggled off for print, or when
+  // no item in that section is discounted.
+  const grpHasDisc   = !discHidden.services && Object.values(serviceGroups).some(d => d.discount > 0);
+  const pharmHasDisc = !discHidden.pharmacy && pharmBills.some((b: any) => b.items.some((it: any) => Number(it.discount) > 0));
   const pharmSpan    = pharmHasDisc ? 7 : 6;
 
   const bedSummaryRows = bedAllotments.length > 0
@@ -567,9 +624,9 @@ function buildSummaryBillHtml(
       </tr>`;
     })
   );
-  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center" style="white-space:nowrap">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
   const pharmCols = pharmHasDisc
-    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:22%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:10%"></colgroup>`
+    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:19%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:10%"></colgroup>`
     : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
   const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
@@ -606,7 +663,8 @@ function buildSummaryBillHtml(
       ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
     ...((pharmTotal > 0 || pharmacyReturn > 0)
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
-    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown),
+    totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
+      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary),
   ]);
 }
 
@@ -624,6 +682,31 @@ function GstBadge({ gst, gstType, onClick }: { gst?: number; gstType?: string; o
     >
       {has ? `GST ${gstLabel(gst, gstType)}` : "+ GST"}
     </button>
+  );
+}
+
+// Toggles whether a section's discount column(s) / the bill-summary discount
+// rows are printed. The on-screen tables always show discounts; this only
+// controls the printed bill. It never touches a total or any calculation.
+function DiscountToggle({ hidden, onClick }: { hidden: boolean; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      title={
+        hidden
+          ? "This section's discount column is hidden on the printed bill — click to include it"
+          : "Hide this section's discount column on the printed bill (screen is unaffected)"
+      }
+      className={`h-7 gap-1.5 text-xs font-medium ${
+        hidden ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "text-gray-600"
+      }`}
+    >
+      {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      {hidden ? "Discount hidden in print" : "Hide discount in print"}
+    </Button>
   );
 }
 
@@ -655,6 +738,9 @@ export default function IpdBilling() {
   const [billDiscType,     setBillDiscType]     = useState<"flat" | "percent">("flat");
   const [billDiscSaved,    setBillDiscSaved]    = useState<number | null>(null);
   const [savingBillDisc,   setSavingBillDisc]   = useState(false);
+  const [billCommentInput,  setBillCommentInput]  = useState("");
+  const [billCommentSaved,  setBillCommentSaved]  = useState("");
+  const [savingBillComment, setSavingBillComment] = useState(false);
   const [estDate,    setEstDate]    = useState(() => todayIST());
   const [estTime,    setEstTime]    = useState(() => nowISTTime());
   const [estManual,  setEstManual]  = useState(false);
@@ -663,6 +749,24 @@ export default function IpdBilling() {
   const [gstInput,   setGstInput]   = useState("");
   const [gstTypeInput, setGstTypeInput] = useState<"percent" | "flat">("percent");
   const [savingGst,  setSavingGst]  = useState(false);
+
+  // Print-only — when a flag is set, that section's discount column (or the
+  // bill-summary discount rows) is omitted from the printed bill. The on-screen
+  // tables always show discounts. Does NOT affect any total or calculation.
+  const [discHidden, setDiscHidden] = useState({
+    services: false,
+    investigations: false,
+    pharmacy: false,
+    summary: false,
+  });
+  const allDiscHidden =
+    discHidden.services && discHidden.investigations && discHidden.pharmacy && discHidden.summary;
+  const toggleDisc = (key: keyof typeof discHidden) =>
+    setDiscHidden(p => ({ ...p, [key]: !p[key] }));
+  const toggleAllDisc = () => {
+    const next = !allDiscHidden;
+    setDiscHidden({ services: next, investigations: next, pharmacy: next, summary: next });
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -689,6 +793,9 @@ export default function IpdBilling() {
           setBillDiscInput(String(p.billDiscount));
           setBillDiscType(p.billDiscountType === "percent" ? "percent" : "flat");
         }
+
+        setBillCommentSaved(p.billComment || "");
+        setBillCommentInput(p.billComment || "");
 
         if (p.estimateEndDate) {
           setEstDate(toISTDateStr(p.estimateEndDate));
@@ -736,6 +843,9 @@ export default function IpdBilling() {
   const pharmGross       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
   const pharmacyReturn   = patient.pharmacyReturn || 0;
   const pharmTotal       = Math.max(0, pharmGross - pharmacyReturn);
+
+  // Per-section discount rows (services / investigation / pharmacy) for the Bill Summary
+  const discountSections   = buildDiscountSections(entries, investigations, pharmBills);
 
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
   const fallbackRate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
@@ -825,6 +935,19 @@ export default function IpdBilling() {
     finally { setSavingBillDisc(false); }
   };
 
+  const handleSaveBillComment = async () => {
+    const val = billCommentInput.trim();
+    setSavingBillComment(true);
+    try {
+      await ipdService.updatePatient(id!, { billComment: val });
+      setBillCommentSaved(val);
+      setBillCommentInput(val);
+      setPatient((p: any) => (p ? { ...p, billComment: val } : p));
+      toast.success(val ? "Bill comment saved" : "Bill comment cleared");
+    } catch { toast.error("Failed to save comment"); }
+    finally { setSavingBillComment(false); }
+  };
+
   const handleSetEstimate = async () => {
     if (!estDate) return toast.error("Select a date");
     if (!(await confirm({ title: "Save reference date?", description: "This reference date will be used across all billing pages for this patient." }))) return;
@@ -904,7 +1027,7 @@ export default function IpdBilling() {
         fallbackBed, fallbackEndDate,
         totalBedCharge, servicesDiscount, servicesGross, servicesNet,
         invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
-        totalGst, gstBreakdown,
+        totalGst, gstBreakdown, discHidden,
       ),
       BILL_PRINT_CSS,
     );
@@ -917,7 +1040,7 @@ export default function IpdBilling() {
         totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
         servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
-        investigations, pharmBills, entries, totalGst, gstBreakdown,
+        investigations, pharmBills, entries, totalGst, gstBreakdown, discHidden,
       ),
       BILL_PRINT_CSS,
     );
@@ -936,6 +1059,12 @@ export default function IpdBilling() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" className="gap-2"
+            onClick={toggleAllDisc}
+            title="Show / hide every discount column & the Bill Summary discount rows on the PRINTED bill. The screen always shows discounts; no total changes.">
+            {allDiscHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {allDiscHidden ? "Show All Discounts in Print" : "Hide All Discounts in Print"}
+          </Button>
           <Button variant="outline" className="gap-2 border-green-300 text-green-700 hover:bg-green-50"
             onClick={() => navigate(`/ipd/receipt/${id}`)}>
             <Receipt className="h-4 w-4" /> Receipts
@@ -1149,7 +1278,10 @@ export default function IpdBilling() {
           {/* Service Details */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Service Details</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">Service Details</CardTitle>
+                <DiscountToggle hidden={discHidden.services} onClick={() => toggleDisc("services")} />
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {Object.keys(serviceGroups).length === 0 ? (
@@ -1244,7 +1376,10 @@ export default function IpdBilling() {
           {investigations.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Investigations</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">Investigations</CardTitle>
+                  <DiscountToggle hidden={discHidden.investigations} onClick={() => toggleDisc("investigations")} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {investigations.map(inv => (
@@ -1301,7 +1436,10 @@ export default function IpdBilling() {
           {pharmBills.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Pharmacy</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">Pharmacy</CardTitle>
+                  <DiscountToggle hidden={discHidden.pharmacy} onClick={() => toggleDisc("pharmacy")} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {pharmBills.map(bill => (
@@ -1363,7 +1501,10 @@ export default function IpdBilling() {
           {/* Bill Totals — matching PDF layout */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Bill Summary</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">Bill Summary</CardTitle>
+                <DiscountToggle hidden={discHidden.summary} onClick={() => toggleDisc("summary")} />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex justify-end">
@@ -1406,12 +1547,12 @@ export default function IpdBilling() {
                     <span className="text-gray-600">Grand Total</span>
                     <span className="font-semibold">{fmt(totalCharge)}</span>
                   </div>
-                  {servicesDiscount > 0 && (
-                    <div className="flex justify-between text-red-600">
-                      <span>(-)Less Discount</span>
-                      <span className="font-semibold">{fmt(servicesDiscount)}</span>
+                  {discountSections.map(sec => (
+                    <div key={sec.section} className="flex justify-between text-red-600">
+                      <span>(-){sec.section} Discount</span>
+                      <span className="font-semibold">{fmt(sec.total)}</span>
                     </div>
-                  )}
+                  ))}
                   <div className="flex justify-between border-t pt-1.5">
                     <span className="text-gray-700 font-medium">Net Total</span>
                     <span className="font-bold">{fmt(preDiscTotal)}</span>
@@ -1464,6 +1605,39 @@ export default function IpdBilling() {
                         <span>{fmt(billDiscAmt)}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Bill-level comment — printed at the end of the bill */}
+                  <div className="border rounded-md bg-gray-50 px-3 py-2 space-y-2 mt-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-gray-600">Bill Comment</span>
+                      {billCommentSaved && (
+                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                          saved · prints on bill
+                        </span>
+                      )}
+                    </div>
+                    <Textarea
+                      value={billCommentInput}
+                      onChange={e => setBillCommentInput(e.target.value)}
+                      placeholder="Add a comment to show at the end of the printed bill…"
+                      rows={2}
+                      className="text-xs resize-y"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
+                        onClick={handleSaveBillComment}
+                        disabled={savingBillComment || billCommentInput.trim() === billCommentSaved.trim()}>
+                        {savingBillComment ? "…" : "Save"}
+                      </Button>
+                      {billCommentSaved && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-gray-500"
+                          onClick={() => { setBillCommentInput(""); handleSaveBillComment(); }}
+                          disabled={savingBillComment}>
+                          Clear
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {totalGst > 0 && (
@@ -1534,7 +1708,10 @@ export default function IpdBilling() {
         <TabsContent value="detail" className="space-y-4 mt-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">All Service Entries</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">All Service Entries</CardTitle>
+                <DiscountToggle hidden={discHidden.services} onClick={() => toggleDisc("services")} />
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {entries.length === 0 ? (
@@ -1590,7 +1767,10 @@ export default function IpdBilling() {
           {investigations.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Investigation Items</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">Investigation Items</CardTitle>
+                  <DiscountToggle hidden={discHidden.investigations} onClick={() => toggleDisc("investigations")} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full text-sm">
@@ -1638,7 +1818,10 @@ export default function IpdBilling() {
           {pharmBills.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Pharmacy Items</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">Pharmacy Items</CardTitle>
+                  <DiscountToggle hidden={discHidden.pharmacy} onClick={() => toggleDisc("pharmacy")} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full text-sm">

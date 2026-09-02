@@ -83,6 +83,9 @@ const ipdPatientSchema = new mongoose.Schema({
   billDiscount:     { type: Number, default: null },
   billDiscountType: { type: String, enum: ["flat", "percent"], default: "flat" },
 
+  // Free-text comment printed at the end of the bill (billing page)
+  billComment:      { type: String, default: "" },
+
   // Cumulative pharmacy return amount (deducted from total pharmacy charge)
   pharmacyReturn: { type: Number, default: 0 },
 

@@ -136,13 +136,78 @@ export function buildServiceGroups(
   return [...metaGroups, ...extraGroups.values()];
 }
 
-// ─── Billing day calculation (12 AM IST → 11:59 PM IST, i.e. calendar day) ───
+// ─── Billing day calculation (12 PM IST → 11:59 AM IST, i.e. noon-to-noon) ───
+// A billing day runs from 12:00 PM IST to 11:59 AM IST the next calendar day.
+// Shifting the timestamp back 12h before flooring to a day number moves the
+// day boundary from midnight IST to noon IST.
 export function computeBillingDays(admissionDate: Date | string, currentDate = new Date()): number {
   const adm = typeof admissionDate === "string" ? new Date(admissionDate) : admissionDate;
   const IST    = 5.5 * 3600000;
-  const admDay = Math.floor((adm.getTime() + IST) / 86400000);
-  const nowDay = Math.floor((currentDate.getTime() + IST) / 86400000);
+  const NOON   = 12 * 3600000;
+  const admDay = Math.floor((adm.getTime() + IST - NOON) / 86400000);
+  const nowDay = Math.floor((currentDate.getTime() + IST - NOON) / 86400000);
   return Math.max(1, nowDay - admDay + 1);
+}
+
+// ─── Per-section discount breakdown for the Bill Summary ──────────────────────
+// Total discount per billing section (Services / Investigation / Pharmacy) —
+// section-level only, no line-item / item-name detail.
+// Bed allotments carry no discount field, so there is never a bed row.
+// Shared by IpdBilling, IpdReceipt and IpdDischarge so all three always agree.
+//
+//  - serviceEntries: billing entries ({ unitCharge, quantity, totalCharge }).
+//      Pass [] when only an aggregate services discount is available (IpdDischarge)
+//      and supply it via `servicesDiscountFallback`.
+//  - investigations: [{ items: [{ amount, netAmount }] }] — discount = amount − netAmount.
+//  - pharmBills:      [{ items: [{ mrp, qty, netAmount }], billDiscount, billDiscountType }]
+//      discount = Σ(mrp×qty − item.netAmount) + the bill-level discount.
+export interface IpdDiscountSection {
+  section: string;
+  total: number;
+}
+
+export function buildDiscountSections(
+  serviceEntries: any[],
+  investigations: any[],
+  pharmBills: any[],
+  servicesDiscountFallback = 0,
+): IpdDiscountSection[] {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const sections: IpdDiscountSection[] = [];
+
+  // Services — sum of every entry's discount, or the aggregate fallback
+  const svcDisc = (serviceEntries || []).reduce((s, e) => {
+    const disc = (Number(e.unitCharge) || 0) * (Number(e.quantity) || 0) - (Number(e.totalCharge) || 0);
+    return s + (disc > 0 ? disc : 0);
+  }, 0);
+  const servicesTotal = svcDisc > 0.001 ? svcDisc : (servicesDiscountFallback > 0.001 ? servicesDiscountFallback : 0);
+  if (servicesTotal > 0.001) sections.push({ section: "Services", total: r2(servicesTotal) });
+
+  // Investigation — sum of (lab amount − net) across every requisition item
+  const invDisc = (investigations || []).reduce((s, inv) =>
+    s + (inv.items || []).reduce((si: number, it: any) => {
+      const disc = (Number(it.amount) || 0) - (Number(it.netAmount) || 0);
+      return si + (disc > 0 ? disc : 0);
+    }, 0), 0);
+  if (invDisc > 0.001) sections.push({ section: "Investigation", total: r2(invDisc) });
+
+  // Pharmacy — sum of (MRP × qty − net) across every bill item, plus each bill's
+  // bill-level discount (flat ₹ or % of the item-net subtotal).
+  const pharmDisc = (pharmBills || []).reduce((s, b) => {
+    const items = b.items || [];
+    const itemDisc = items.reduce((si: number, it: any) => {
+      const gross = (parseFloat(String(it.mrp)) || 0) * (parseFloat(String(it.qty)) || 0);
+      const disc = gross - (Number(it.netAmount) || 0);
+      return si + (disc > 0 ? disc : 0);
+    }, 0);
+    const itemsNet = items.reduce((si: number, it: any) => si + (Number(it.netAmount) || 0), 0);
+    const bd = Number(b.billDiscount) || 0;
+    const billDisc = bd <= 0 ? 0 : (b.billDiscountType === "%" ? itemsNet * bd / 100 : bd);
+    return s + itemDisc + billDisc;
+  }, 0);
+  if (pharmDisc > 0.001) sections.push({ section: "Pharmacy", total: r2(pharmDisc) });
+
+  return sections;
 }
 
 // ─── IST-aware "today" / "now" helpers ────────────────────────────────────────

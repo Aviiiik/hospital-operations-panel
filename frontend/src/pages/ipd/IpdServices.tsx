@@ -353,7 +353,7 @@ export default function IpdServices() {
         <div>
           <span className="text-gray-400 mr-1">Billing Days:</span>
           <span className="font-semibold text-indigo-700">{billingDays}</span>
-          <span className="text-gray-400 ml-1 text-[10px]">(12PM cycle)</span>
+          <span className="text-gray-400 ml-1 text-[10px]">(12 PM – 11:59 AM cycle)</span>
         </div>
         <div>
           <span className="text-gray-400 mr-1">Status:</span>

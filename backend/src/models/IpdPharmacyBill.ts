@@ -27,6 +27,8 @@ const ipdPharmacyBillSchema = new mongoose.Schema({
   vendorBillNo: { type: String, default: "" },
   items:        [pharmacyItemSchema],
   totalAmount:  { type: Number, default: 0 },
+  billDiscount:     { type: Number, default: 0 },
+  billDiscountType: { type: String, default: "₹" },
   netAmount:    { type: Number, default: 0 },
 }, { timestamps: true });
 
