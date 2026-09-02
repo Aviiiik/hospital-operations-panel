@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST } from "@/services/ipdService";
+import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 import { printViaHiddenIframe, wrapPrintDoc, hospitalHeaderHtml, DOC_GRID_CSS, HOSPITAL_HEADER_CSS } from "@/lib/ipdPrint";
 
@@ -193,13 +193,13 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
 interface ChargeData {
   bedTotal: number;
   servicesGross: number;
-  servicesDiscount: number;
   servicesNet: number;
   invTotal: number;
   pharmTotal: number;
   billDiscAmt: number;
   totalGst: number;
   gstBreakdown: { label: string; amount: number }[];
+  discountSections: IpdDiscountSection[];
   grandTotal: number;
 }
 
@@ -234,12 +234,12 @@ function printAllReceipts(
       ? `<tr><td>Bed Charges</td><td class="right">${fmtAmt(charges.bedTotal)}</td></tr>` : "",
     charges.servicesGross > 0
       ? `<tr><td>Nursing Home Charges</td><td class="right">${fmtAmt(charges.servicesGross)}</td></tr>` : "",
-    charges.servicesDiscount > 0
-      ? `<tr><td style="color:#c00">(-) Discount</td><td class="right" style="color:#c00">(${fmtAmt(charges.servicesDiscount)})</td></tr>` : "",
     charges.invTotal > 0
       ? `<tr><td>Investigations</td><td class="right">${fmtAmt(charges.invTotal)}</td></tr>` : "",
     charges.pharmTotal > 0
       ? `<tr><td>Pharmacy</td><td class="right">${fmtAmt(charges.pharmTotal)}</td></tr>` : "",
+    ...charges.discountSections.map(sec =>
+      `<tr><td style="color:#c00">(-) ${sec.section} Discount</td><td class="right" style="color:#c00">(${fmtAmt(sec.total)})</td></tr>`),
     charges.billDiscAmt > 0
       ? `<tr><td style="color:#c00">(-) Bill Discount</td><td class="right" style="color:#c00">(${fmtAmt(charges.billDiscAmt)})</td></tr>` : "",
     charges.totalGst > 0
@@ -400,6 +400,9 @@ export default function IpdReceipt() {
   const pharmacyReturn = patient?.pharmacyReturn || 0;
   const pharmTotal      = Math.max(0, pharmGross - pharmacyReturn);
 
+  // Per-section discount rows (services / investigation / pharmacy) for the Bill Summary
+  const discountSections = buildDiscountSections(entries, investigations, pharmBills, servicesDis);
+
   // GST — mirrors IpdBilling.tsx so both pages always agree
   const bedGstItems = bedAllotments.map((a: any) => {
     const days = a.endDate && a.allotmentDate
@@ -526,13 +529,13 @@ export default function IpdReceipt() {
               onClick={() => printAllReceipts(patient, receipts, {
                 bedTotal:         bedTotal,
                 servicesGross:    billSummary?.gross    ?? 0,
-                servicesDiscount: billSummary?.discount ?? 0,
                 servicesNet:      billSummary?.net      ?? 0,
                 invTotal:         invTotal,
                 pharmTotal:       pharmTotal,
                 billDiscAmt,
                 totalGst,
                 gstBreakdown,
+                discountSections,
                 grandTotal,
               }, logoUrl)}
             >
@@ -849,12 +852,6 @@ export default function IpdReceipt() {
                   <span className="font-medium">{fmt(servicesGross)}</span>
                 </div>
               )}
-              {servicesDis > 0 && (
-                <div className="flex justify-between text-red-600">
-                  <span>(-)Less Discount</span>
-                  <span className="font-medium">{fmt(servicesDis)}</span>
-                </div>
-              )}
               {invTotal > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Investigations</span>
@@ -867,6 +864,12 @@ export default function IpdReceipt() {
                   <span className="font-medium">{fmt(pharmTotal)}</span>
                 </div>
               )}
+              {discountSections.map(sec => (
+                <div key={sec.section} className="flex justify-between text-red-600">
+                  <span>(-){sec.section} Discount</span>
+                  <span className="font-medium">{fmt(sec.total)}</span>
+                </div>
+              ))}
               {billDiscAmt > 0 && (
                 <div className="flex justify-between text-red-600">
                   <span>(-) Bill Discount</span>

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
   DISCHARGE_TYPES, BED_CHARGES, computeBillingDays, isBedChargeExempt,
-  todayIST, nowISTTime, toISTDateStr,
+  todayIST, nowISTTime, toISTDateStr, buildDiscountSections,
 } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS } from "@/lib/ipdPrint";
@@ -227,6 +227,8 @@ export default function IpdDischarge() {
   const [patient,        setPatient]        = useState<any>(null);
   const [billingSummary,  setBillingSummary]  = useState<{ gross: number; discount: number; net: number; count: number } | null>(null);
   const [bedAllotments,   setBedAllotments]  = useState<any[]>([]);
+  const [investigations,  setInvestigations] = useState<any[]>([]);
+  const [pharmBills,      setPharmBills]     = useState<any[]>([]);
   const [invTotal,        setInvTotal]       = useState(0);
   const [pharmTotal,      setPharmTotal]     = useState(0);
  // const [pharmMedicines,  setPharmMedicines] = useState<string[]>([]);
@@ -266,10 +268,12 @@ export default function IpdDischarge() {
       setBillingSummary(br.data.data);
       setBedAllotments(asr.data.data.allotments || []);
       setReceiptSummary(rr.data.data || null);
-      const investigations: any[] = invR.data.data.investigations || [];
-      setInvTotal(investigations.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0));
-      const pharmBills: any[] = phR.data.data.bills || [];
-      setPharmTotal(pharmBills.reduce((s: number, b: any) => s + (b.netAmount || 0), 0));
+      const investigationsData: any[] = invR.data.data.investigations || [];
+      setInvestigations(investigationsData);
+      setInvTotal(investigationsData.reduce((s: number, i: any) => s + (i.totalAmount || 0), 0));
+      const pharmBillsData: any[] = phR.data.data.bills || [];
+      setPharmBills(pharmBillsData);
+      setPharmTotal(pharmBillsData.reduce((s: number, b: any) => s + (b.netAmount || 0), 0));
      // const allMeds = pharmBills.flatMap((b: any) => (b.items || []).map((it: any) => it.itemName as string));
       //setPharmMedicines([...new Set(allMeds.filter(Boolean))]);
       setForm(f => ({
@@ -368,6 +372,9 @@ export default function IpdDischarge() {
   const servicesDiscount = billingSummary?.discount ?? 0;
   const servicesNet      = billingSummary?.net ?? 0;
   const preDiscTotal     = computedBedTotal + servicesGross + invTotal + pharmTotal - servicesDiscount;
+
+  // Per-section discount rows (services aggregate + investigation / pharmacy totals) for the Bill Summary
+  const discountSections = buildDiscountSections([], investigations, pharmBills, servicesDiscount);
   const billDisc         = patient.billDiscount ?? 0;
   const billDiscType     = patient.billDiscountType ?? "flat";
   const billDiscAmt      = billDisc > 0
@@ -458,7 +465,7 @@ export default function IpdDischarge() {
               <p className="text-xs text-gray-500">Billing Days</p>
             </div>
             <p className="text-lg font-bold text-indigo-700">{billingDays}</p>
-            <p className="text-[10px] text-gray-400">12 AM – 11:59 PM cycle</p>
+            <p className="text-[10px] text-gray-400">12 PM – 11:59 AM cycle</p>
           </CardContent>
         </Card>
         <Card className="border-blue-100">
@@ -553,7 +560,7 @@ export default function IpdDischarge() {
             </div>
           </div>
           <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 mt-3">
-            Billing days increment at midnight (12 AM IST). Discharge before midnight to avoid the next day's bed charge.
+            Billing days increment at noon (12 PM IST). Discharge before noon to avoid the next day's bed charge.
           </p>
         </CardContent>
       </Card>
@@ -660,12 +667,6 @@ export default function IpdDischarge() {
                 <span className="text-gray-600">Nursing Home Charge</span>
                 <span className="font-medium">{fmtRs(servicesGross)}</span>
               </div>
-              {servicesDiscount > 0 && (
-                <div className="flex justify-between text-red-500 text-xs">
-                  <span>(-)Service Discount</span>
-                  <span>{fmtRs(servicesDiscount)}</span>
-                </div>
-              )}
               {invTotal > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Investigations</span>
@@ -678,6 +679,12 @@ export default function IpdDischarge() {
                   <span className="font-medium">{fmtRs(pharmTotal)}</span>
                 </div>
               )}
+              {discountSections.map(sec => (
+                <div key={sec.section} className="flex justify-between text-red-500 text-xs">
+                  <span>(-){sec.section} Discount</span>
+                  <span>{fmtRs(sec.total)}</span>
+                </div>
+              ))}
               <div className="flex justify-between border-t pt-1.5">
                 <span className="text-gray-700 font-medium">Net Total</span>
                 <span className="font-semibold">{fmtRs(preDiscTotal)}</span>

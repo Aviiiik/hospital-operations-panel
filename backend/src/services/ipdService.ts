@@ -15,11 +15,15 @@ function istNow(): Date {
   return new Date(Date.now() + 5.5 * 60 * 60 * 1000);
 }
 
-// ─── Billing day calculation (12 AM IST → 11:59 PM IST, i.e. calendar day) ───
+// ─── Billing day calculation (12 PM IST → 11:59 AM IST, i.e. noon-to-noon) ───
+// A billing day runs from 12:00 PM IST to 11:59 AM IST the next calendar day.
+// Shifting the timestamp back 12h before flooring to a day number moves the
+// day boundary from midnight IST to noon IST.
 export function computeBillingDays(admissionDate: Date, currentDate = new Date()): number {
   const IST    = 5.5 * 3600000;
-  const admDay = Math.floor((admissionDate.getTime() + IST) / 86400000);
-  const nowDay = Math.floor((currentDate.getTime() + IST) / 86400000);
+  const NOON   = 12 * 3600000;
+  const admDay = Math.floor((admissionDate.getTime() + IST - NOON) / 86400000);
+  const nowDay = Math.floor((currentDate.getTime() + IST - NOON) / 86400000);
   return Math.max(1, nowDay - admDay + 1);
 }
 
@@ -683,6 +687,14 @@ export async function getReceiptSummary(patientId: string) {
 
 // ─── Pharmacy Bills ───────────────────────────────────────────────────────────
 
+// Apply a bill-level discount (flat ₹ or %) to the summed item net, floored at 0.
+function applyBillDiscount(itemsNet: number, discount: number, discountType: string): number {
+  const disc = Number(discount) || 0;
+  if (disc <= 0) return Math.max(0, itemsNet);
+  const cut = discountType === "%" ? itemsNet * disc / 100 : disc;
+  return Math.max(0, itemsNet - cut);
+}
+
 async function generatePharmacyBillNo(): Promise<string> {
   const now = istNow();
   const year = now.getFullYear();
@@ -715,7 +727,10 @@ export async function createPharmacyBill(patientId: string, data: any) {
     return { ...it, qty, mrp, discount: disc, discountType: discType, totalAmount: total, netAmount: Math.max(0, net) };
   });
   const totalAmount = items.reduce((s: number, i: any) => s + i.totalAmount, 0);
-  const netAmount   = items.reduce((s: number, i: any) => s + i.netAmount,   0);
+  const itemsNet    = items.reduce((s: number, i: any) => s + i.netAmount,   0);
+  const billDiscount     = Number(data.billDiscount) || 0;
+  const billDiscountType = data.billDiscountType === "%" ? "%" : "₹";
+  const netAmount = applyBillDiscount(itemsNet, billDiscount, billDiscountType);
   const bill = new IpdPharmacyBill({
     patientId,
     admissionId: patient.admissionId,
@@ -726,6 +741,8 @@ export async function createPharmacyBill(patientId: string, data: any) {
     vendorBillNo: data.vendorBillNo || "",
     items,
     totalAmount,
+    billDiscount,
+    billDiscountType,
     netAmount,
   });
   await bill.save();
@@ -733,7 +750,7 @@ export async function createPharmacyBill(patientId: string, data: any) {
 }
 
 export async function updatePharmacyBill(id: string, data: any) {
-  const allowed = ["billDate", "referredBy", "vendor", "vendorBillNo", "items"];
+  const allowed = ["billDate", "referredBy", "vendor", "vendorBillNo", "items", "billDiscount", "billDiscountType"];
   const update: any = {};
   allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
   if (update.billDate) update.billDate = new Date(update.billDate);
@@ -751,7 +768,22 @@ export async function updatePharmacyBill(id: string, data: any) {
       };
     });
     update.totalAmount = update.items.reduce((s: number, i: any) => s + i.totalAmount, 0);
-    update.netAmount   = update.items.reduce((s: number, i: any) => s + i.netAmount,   0);
+  }
+  if (update.billDiscount !== undefined) update.billDiscount = Number(update.billDiscount) || 0;
+  if (update.billDiscountType !== undefined) update.billDiscountType = update.billDiscountType === "%" ? "%" : "₹";
+
+  // Recompute the bill net whenever items or the bill-level discount change.
+  if (update.items || update.billDiscount !== undefined || update.billDiscountType !== undefined) {
+    const existing = await IpdPharmacyBill.findById(id).lean() as any;
+    const items = update.items || existing?.items || [];
+    const itemsNet = items.reduce((s: number, i: any) => s + (Number(i.netAmount) || 0), 0);
+    const billDiscount = update.billDiscount !== undefined
+      ? update.billDiscount
+      : (Number(existing?.billDiscount) || 0);
+    const billDiscountType = update.billDiscountType !== undefined
+      ? update.billDiscountType
+      : (existing?.billDiscountType === "%" ? "%" : "₹");
+    update.netAmount = applyBillDiscount(itemsNet, billDiscount, billDiscountType);
   }
   return IpdPharmacyBill.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
 }
