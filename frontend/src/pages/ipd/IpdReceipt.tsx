@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Plus, Printer, Trash2, Receipt, IndianRupee, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
+import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
 import { printViaHiddenIframe, wrapPrintDoc, hospitalHeaderHtml, DOC_GRID_CSS, HOSPITAL_HEADER_CSS } from "@/lib/ipdPrint";
 
@@ -372,24 +372,24 @@ export default function IpdReceipt() {
   const servicesDis     = billSummary?.discount ?? 0;
 
   const openEndDate = patient?.dischargeDate
-    ? new Date(patient.dischargeDate)
+    ? combineISTDateTime(patient.dischargeDate, patient.dischargeTime)
     : patient?.estimateEndDate
-      ? new Date(patient.estimateEndDate)
+      ? combineISTDateTime(patient.estimateEndDate, patient.estimateEndTime)
       : liveNow;
 
   const computedBedTotal = bedAllotments.length > 0
     ? bedAllotments.reduce((s: number, a: any) => {
-        const days = a.endDate && a.allotmentDate
-          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : (a.allotmentDate
-              ? computeBillingDays(new Date(a.allotmentDate), openEndDate)
-              : 1);
+        const from = a.allotmentDate ? combineISTDateTime(a.allotmentDate, a.allotmentTime) : null;
+        const days = !from ? 1
+          : a.endDate
+            ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+            : computeBillingDays(from, openEndDate);
         return s + days * (a.charge || 0);
       }, 0)
     : (() => {
         const rate = (patient?.bedCategory && !isBedChargeExempt(patient?.department)) ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
         const days = patient?.admissionDate
-          ? computeBillingDays(new Date(patient.admissionDate), openEndDate)
+          ? computeBillingDays(combineISTDateTime(patient.admissionDate, patient.admissionTime), openEndDate)
           : 1;
         return rate * days;
       })();
@@ -405,9 +405,11 @@ export default function IpdReceipt() {
 
   // GST — mirrors IpdBilling.tsx so both pages always agree
   const bedGstItems = bedAllotments.map((a: any) => {
-    const days = a.endDate && a.allotmentDate
-      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-      : (a.allotmentDate ? computeBillingDays(new Date(a.allotmentDate), openEndDate) : 1);
+    const from = a.allotmentDate ? combineISTDateTime(a.allotmentDate, a.allotmentTime) : null;
+    const days = !from ? 1
+      : a.endDate
+        ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+        : computeBillingDays(from, openEndDate);
     return { label: `Bed — ${a.bedCategory} (${a.bedNo})`, amount: gstAmt(days * (a.charge || 0), a.gst, a.gstType) };
   }).filter((x: any) => x.amount > 0);
   const svcGstItems = entries

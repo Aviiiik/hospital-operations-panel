@@ -27,6 +27,23 @@ export function computeBillingDays(admissionDate: Date, currentDate = new Date()
   return Math.max(1, nowDay - admDay + 1);
 }
 
+// Converts any Date/ISO timestamp to its IST calendar date (YYYY-MM-DD) —
+// mirrors the frontend helper of the same name in ipdService.ts.
+function toISTDateStr(d: Date | string): string {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return new Date(dt.getTime() + 5.5 * 3600000).toISOString().slice(0, 10);
+}
+
+// Combines a stored date-only value with a separate "HH:MM" time-of-day
+// string (e.g. bed allotment's allotmentTime/endTime) into the actual IST
+// instant — use before computeBillingDays() whenever a record tracks its
+// clock time separately from its date. Mirrors the frontend helper.
+function combineISTDateTime(d: Date | string, time?: string): Date {
+  const dateStr = toISTDateStr(d);
+  const [h, m] = (time || "00:00").split(":").map(n => parseInt(n, 10) || 0);
+  return new Date(new Date(`${dateStr}T00:00:00.000Z`).getTime() - 5.5 * 3600000 + h * 3600000 + m * 60000);
+}
+
 // ─── ID Generation ────────────────────────────────────────────────────────────
 
 async function generateAdmissionId(): Promise<string> {
@@ -605,7 +622,7 @@ export async function getBedAllotmentSummary(patientId: string) {
   let totalBedCharge = 0;
   const details = allotments.map((a: any) => {
     const days = a.endDate
-      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
+      ? computeBillingDays(combineISTDateTime(a.allotmentDate, a.allotmentTime), combineISTDateTime(a.endDate, a.endTime))
       : 1;
     const charge = days * (a.charge || 0);
     totalBedCharge += charge;

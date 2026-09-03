@@ -235,6 +235,18 @@ export function toISTDateStr(d: Date | string): string {
   return new Date(dt.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+// Combines a stored date-only value with a separate "HH:MM" time-of-day
+// string (e.g. bed allotment's allotmentTime/endTime) into the actual IST
+// instant. Use this before computeBillingDays() whenever a record tracks its
+// clock time separately from its date — otherwise the noon-to-noon cutoff
+// only ever sees the date's stored UTC-midnight timestamp and never reflects
+// the real time the allotment/discharge actually happened at.
+export function combineISTDateTime(d: Date | string, time?: string): Date {
+  const dateStr = toISTDateStr(d);
+  const [h, m] = (time || "00:00").split(":").map(n => parseInt(n, 10) || 0);
+  return new Date(new Date(`${dateStr}T00:00:00.000Z`).getTime() - IST_OFFSET_MS + h * 3600000 + m * 60000);
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const BED_CATEGORIES = [

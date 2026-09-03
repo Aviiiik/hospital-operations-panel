@@ -9,7 +9,7 @@ import { ArrowLeft, Printer, IndianRupee, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
-  DISCHARGE_TYPES, BED_CHARGES, computeBillingDays, isBedChargeExempt,
+  DISCHARGE_TYPES, BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt,
   todayIST, nowISTTime, toISTDateStr, buildDiscountSections,
 } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
@@ -341,29 +341,30 @@ export default function IpdDischarge() {
   if (!patient) return <div className="flex items-center justify-center h-64 text-red-500">Patient not found</div>;
 
   const dischargeEndDate = form.dischargeDate
-    ? new Date(`${form.dischargeDate}T${form.dischargeTime || "00:00"}`)
+    ? combineISTDateTime(form.dischargeDate, form.dischargeTime)
     : undefined;
 
   const billingDays = patient.admissionDate
-    ? computeBillingDays(new Date(patient.admissionDate), dischargeEndDate)
+    ? computeBillingDays(combineISTDateTime(patient.admissionDate, patient.admissionTime), dischargeEndDate)
     : 1;
 
   const admDays = billingDays;
 
   const openFallback = dischargeEndDate
-    ?? (patient.estimateEndDate ? new Date(patient.estimateEndDate) : new Date());
+    ?? (patient.estimateEndDate ? combineISTDateTime(patient.estimateEndDate, patient.estimateEndTime) : new Date());
 
   const computedBedTotal = bedAllotments.length > 0
     ? bedAllotments.reduce((s: number, a: any) => {
-        const days = a.endDate && a.allotmentDate
-          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : computeBillingDays(new Date(a.allotmentDate), openFallback);
+        const from = combineISTDateTime(a.allotmentDate, a.allotmentTime);
+        const days = a.endDate
+          ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+          : computeBillingDays(from, openFallback);
         return s + days * (a.charge || 0);
       }, 0)
     : (() => {
         const rate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory as string] ?? 0) : 0;
         const days = patient.admissionDate && openFallback
-          ? computeBillingDays(new Date(patient.admissionDate), openFallback)
+          ? computeBillingDays(combineISTDateTime(patient.admissionDate, patient.admissionTime), openFallback)
           : billingDays;
         return rate * days;
       })();

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ArrowLeft, Printer, Receipt, Stethoscope, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
+import ipdService, { BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
 import { openIpdPrintWindow, printHeaderHtml, doctorServiceBoxHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
@@ -392,8 +392,8 @@ function buildDetailedBillHtml(
 
   const bedRows = bedAllotments.map(a => {
     const days = a.endDate && a.allotmentDate
-      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-      : (a.allotmentDate && estEndDate ? computeBillingDays(new Date(a.allotmentDate), estEndDate) : 1);
+      ? computeBillingDays(combineISTDateTime(a.allotmentDate, a.allotmentTime), combineISTDateTime(a.endDate, a.endTime))
+      : (a.allotmentDate && estEndDate ? computeBillingDays(combineISTDateTime(a.allotmentDate, a.allotmentTime), estEndDate) : 1);
     const charge = days * a.charge;
     const g = gstAmt(charge, a.gst, a.gstType);
     bedGstTotal += g;
@@ -552,8 +552,8 @@ function buildSummaryBillHtml(
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
         const days = a.endDate && a.allotmentDate
-          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : (a.allotmentDate && estEndDate ? computeBillingDays(new Date(a.allotmentDate), estEndDate) : 1);
+          ? computeBillingDays(combineISTDateTime(a.allotmentDate, a.allotmentTime), combineISTDateTime(a.endDate, a.endTime))
+          : (a.allotmentDate && estEndDate ? computeBillingDays(combineISTDateTime(a.allotmentDate, a.allotmentTime), estEndDate) : 1);
         const charge = days * a.charge;
         const g = gstAmt(charge, a.gst, a.gstType);
         bedGstTotal += g;
@@ -850,10 +850,10 @@ export default function IpdBilling() {
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
   const fallbackRate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
   const fallbackEndDate = patient.dischargeDate
-    ? new Date(patient.dischargeDate)
-    : (estDate ? new Date(`${estDate}T${estTime || "00:00"}`) : null);
+    ? combineISTDateTime(patient.dischargeDate, patient.dischargeTime)
+    : (estDate ? combineISTDateTime(estDate, estTime) : null);
   const fallbackDays = patient.admissionDate && fallbackEndDate
-    ? computeBillingDays(new Date(patient.admissionDate), fallbackEndDate)
+    ? computeBillingDays(combineISTDateTime(patient.admissionDate, patient.admissionTime), fallbackEndDate)
     : 1;
   const fallbackBed = bedAllotments.length === 0 && patient.bedCategory
     ? { rate: fallbackRate, days: fallbackDays, charge: fallbackRate * fallbackDays }
@@ -863,19 +863,21 @@ export default function IpdBilling() {
   const totalBedCharge = bedAllotments.length > 0
     ? bedAllotments.reduce((s, a) => {
         if (!a.allotmentDate) return s;
+        const from = combineISTDateTime(a.allotmentDate, a.allotmentTime);
         const days = a.endDate
-          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-          : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+          ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+          : computeBillingDays(from, openEndDate);
         return s + days * (a.charge || 0);
       }, 0)
     : (fallbackBed?.charge ?? 0);
 
   // GST — applied per item, summed on top of the grand total
   const bedGstItems = bedAllotments.map(a => {
-    const days = !a.allotmentDate ? 1
+    const from = a.allotmentDate ? combineISTDateTime(a.allotmentDate, a.allotmentTime) : null;
+    const days = !from ? 1
       : a.endDate
-        ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-        : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+        ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+        : computeBillingDays(from, openEndDate);
     return { label: `Bed — ${a.bedCategory} (${a.bedNo})`, amount: gstAmt(days * (a.charge || 0), a.gst, a.gstType) };
   }).filter(x => x.amount > 0);
   const svcGstItems = entries
@@ -1235,10 +1237,11 @@ export default function IpdBilling() {
                   </thead>
                   <tbody>
                     {bedAllotments.map(a => {
-                      const days = !a.allotmentDate ? 1
+                      const from = a.allotmentDate ? combineISTDateTime(a.allotmentDate, a.allotmentTime) : null;
+                      const days = !from ? 1
                         : a.endDate
-                          ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-                          : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+                          ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+                          : computeBillingDays(from, openEndDate);
                       const bedCharge = days * a.charge;
                       return (
                         <tr key={a._id} className="border-t">
