@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, BedDouble, Trash2, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CATEGORIES, BED_CHARGES, computeBillingDays, isBedChargeExempt, todayIST, nowISTTime } from "@/services/ipdService";
+import ipdService, { BED_CATEGORIES, BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, nowISTTime } from "@/services/ipdService";
 
 function todayStr() { return todayIST(); }
 function nowTime() { return nowISTTime(); }
@@ -174,14 +174,15 @@ export default function IpdBedAllotment() {
   const isDischargedRef  = Boolean(patient.dischargeDate);
   const hasManualEstimate = Boolean(patient.dischargeDate || patient.estimateEndDate);
   const openEndDate: Date = patient.dischargeDate
-    ? new Date(patient.dischargeDate)
-    : (patient.estimateEndDate ? new Date(patient.estimateEndDate) : liveNow);
+    ? combineISTDateTime(patient.dischargeDate, patient.dischargeTime)
+    : (patient.estimateEndDate ? combineISTDateTime(patient.estimateEndDate, patient.estimateEndTime) : liveNow);
 
   const totalBedCharge = allotments.reduce((s, a) => {
     if (!a.allotmentDate) return s;
+    const from = combineISTDateTime(a.allotmentDate, a.allotmentTime);
     const days = a.endDate
-      ? computeBillingDays(new Date(a.allotmentDate), new Date(a.endDate))
-      : computeBillingDays(new Date(a.allotmentDate), openEndDate);
+      ? computeBillingDays(from, combineISTDateTime(a.endDate, a.endTime))
+      : computeBillingDays(from, openEndDate);
     return s + days * (a.charge || 0);
   }, 0);
 
@@ -400,12 +401,13 @@ export default function IpdBedAllotment() {
               <tbody>
                 {allotments.map(a => {
                   const isEditing = editingId === a._id;
-                  const effectiveFrom = isEditing && editEnd.allotmentDate
-                    ? new Date(editEnd.allotmentDate)
-                    : new Date(a.allotmentDate);
+                  const effectiveFrom = combineISTDateTime(
+                    isEditing && editEnd.allotmentDate ? editEnd.allotmentDate : a.allotmentDate,
+                    isEditing ? (editEnd.allotmentTime || a.allotmentTime) : a.allotmentTime
+                  );
                   const effectiveTo = isEditing
-                    ? (editEnd.endDate ? new Date(editEnd.endDate) : openEndDate)
-                    : (a.endDate ? new Date(a.endDate) : openEndDate);
+                    ? (editEnd.endDate ? combineISTDateTime(editEnd.endDate, editEnd.endTime) : openEndDate)
+                    : (a.endDate ? combineISTDateTime(a.endDate, a.endTime) : openEndDate);
                   const days = computeBillingDays(effectiveFrom, effectiveTo);
                   const charge = days * (isEditing && editEnd.charge !== "" ? parseFloat(editEnd.charge) || 0 : (a.charge || 0));
                   return (

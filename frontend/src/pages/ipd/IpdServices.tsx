@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
   CatalogueService, ServiceGroup,
-  buildServiceGroups, SERVICE_GROUP_META, computeBillingDays, todayIST,
+  buildServiceGroups, SERVICE_GROUP_META, computeBillingDays, combineISTDateTime, todayIST,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
 
@@ -122,7 +122,7 @@ export default function IpdServices() {
   const isTimeBased  = isPerDay || isPerHour;
 
   const billingDays = patient?.admissionDate
-    ? computeBillingDays(new Date(patient.admissionDate)) : 1;
+    ? computeBillingDays(combineISTDateTime(patient.admissionDate, patient.admissionTime)) : 1;
 
   const amount    = (Number(form.unitCharge) || 0) * (Number(form.quantity) || 0);
   const discountAmt = form.discountType === "percent"
