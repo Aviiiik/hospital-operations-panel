@@ -15,16 +15,27 @@ function istNow(): Date {
   return new Date(Date.now() + 5.5 * 60 * 60 * 1000);
 }
 
-// ─── Billing day calculation (12 PM IST → 11:59 AM IST, i.e. noon-to-noon) ───
-// A billing day runs from 12:00 PM IST to 11:59 AM IST the next calendar day.
-// Shifting the timestamp back 12h before flooring to a day number moves the
-// day boundary from midnight IST to noon IST.
+// ─── Billing day calculation (first day = 24h from admission, then noon-to-noon) ───
+// Day 1 runs a full 24 hours from the exact admission/allotment instant.
+// Every day after that is a 12:00 PM IST → 11:59 AM IST noon-to-noon block:
+// day 2 begins at the first noon IST at or after the end of day 1, and each
+// subsequent noon crossed adds one more day. The window between the end of
+// day 1 and that first noon is still counted as day 1 (no partial-day bump).
+//
+//   Admitted 6 PM Sep 2 → day 1 ends 6 PM Sep 3 → day 2 starts 12 PM Sep 4
+//                        → day 3 starts 12 PM Sep 5 …
+//   Admitted 9 AM Sep 2 → day 1 ends 9 AM Sep 3 → day 2 starts 12 PM Sep 3
+//                        → day 3 starts 12 PM Sep 4 …
+// Mirrors the frontend helper of the same name in frontend/src/services/ipdService.ts.
 export function computeBillingDays(admissionDate: Date, currentDate = new Date()): number {
-  const IST    = 5.5 * 3600000;
-  const NOON   = 12 * 3600000;
-  const admDay = Math.floor((admissionDate.getTime() + IST - NOON) / 86400000);
-  const nowDay = Math.floor((currentDate.getTime() + IST - NOON) / 86400000);
-  return Math.max(1, nowDay - admDay + 1);
+  const IST  = 5.5 * 3600000;
+  const NOON = 12 * 3600000;
+  const DAY  = 86400000;
+  const day1End = admissionDate.getTime() + DAY;
+  // noon-day index: increments each time an instant crosses 12:00 PM IST
+  const noonDay = (t: number) => Math.floor((t + IST - NOON) / DAY);
+  const noonsPassed = noonDay(currentDate.getTime()) - noonDay(day1End);
+  return 1 + Math.max(0, noonsPassed);
 }
 
 // Converts any Date/ISO timestamp to its IST calendar date (YYYY-MM-DD) —
