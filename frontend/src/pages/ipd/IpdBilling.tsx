@@ -288,20 +288,23 @@ function totalsBlock(
   discountSections: IpdDiscountSection[] = [],
   billComment: string = "",
   hideBillDiscount: boolean = false,
+  doctorGross: number = 0,
+  doctorDiscount: number = 0,
 ) {
   const totalPaid  = receiptSummary?.totalReceived ?? 0;
   const totalTds   = receiptSummary?.totalTds ?? 0;
   const totalDis   = receiptSummary?.totalDisallowed ?? 0;
-  const preDisc    = totalBedCharge + servicesGross + invTotal + pharmTotal - servicesDiscount;
+  const preDisc    = totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal - servicesDiscount - doctorDiscount;
   const netDue     = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
   return `
 <div class="totals-box">
   <div class="totals-inner">
     <div class="totals-row"><span>Total Bed Charge</span><span class="bold">${fmt(totalBedCharge)}</span></div>
     <div class="totals-row"><span>Nursing Home Charge</span><span class="bold">${fmt(servicesGross)}</span></div>
+    ${doctorGross > 0 ? `<div class="totals-row"><span>Doctor / Consultation Charge</span><span class="bold">${fmt(doctorGross)}</span></div>` : ""}
     ${invTotal > 0 ? `<div class="totals-row"><span>Investigations</span><span class="bold">${fmt(invTotal)}</span></div>` : ""}
     ${pharmTotal > 0 ? `<div class="totals-row"><span>Pharmacy</span><span class="bold">${fmt(pharmTotal)}</span></div>` : ""}
-    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + invTotal + pharmTotal)}</span></div>
+    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal)}</span></div>
     ${discountSummaryHtml(discountSections)}
     <div class="totals-sep"></div>
     <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(preDisc)}</span></div>
@@ -346,12 +349,22 @@ function visibleDiscountSections(
   hidden: DiscPrintHidden,
 ): IpdDiscountSection[] {
   if (hidden.summary) return [];
-  return buildDiscountSections(entries, investigations, pharmBills).filter(s => {
+  const regular = entries.filter(e => !e.doctorName);
+  const doctor  = entries.filter(e => e.doctorName);
+  const secs = buildDiscountSections(regular, investigations, pharmBills).filter(s => {
     if (s.section === "Services" && hidden.services) return false;
     if (s.section === "Investigation" && hidden.investigations) return false;
     if (s.section === "Pharmacy" && hidden.pharmacy) return false;
     return true;
   });
+  if (!hidden.services) {
+    const dd = doctor.reduce((s, e) => s + Math.max(0, e.unitCharge * e.quantity - e.totalCharge), 0);
+    if (dd > 0.001) {
+      const i = secs.findIndex(s => s.section === "Services");
+      secs.splice(i >= 0 ? i + 1 : 0, 0, { section: "Doctor / Consultation", total: Math.round(dd * 100) / 100 });
+    }
+  }
+  return secs;
 }
 
 function buildDetailedBillHtml(
@@ -379,10 +392,12 @@ function buildDetailedBillHtml(
   discHidden: DiscPrintHidden = NO_DISC_HIDDEN,
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
-  const svcGstTotal = entries.reduce((s, e) => s + gstAmt(e.totalCharge, e.gst, e.gstType), 0);
 
   const doctorEntries  = entries.filter(e => e.doctorName);
   const regularEntries = entries.filter(e => !e.doctorName);
+  const svcGstTotal    = regularEntries.reduce((s, e) => s + gstAmt(e.totalCharge, e.gst, e.gstType), 0);
+  const doctorGross    = doctorEntries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const doctorDiscount = doctorEntries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
 
   // Hide a section's Discount column when it was toggled off for print, or when
   // no item in that section is discounted.
@@ -415,6 +430,7 @@ function buildDetailedBillHtml(
     return `
     <tr>
       <td>${i + 1}</td>
+      <td>${fmtDate(e.date)}</td>
       <td>${e.serviceName}</td>
       <td class="sub">${e.serviceGroup}</td>
       <td class="center">${e.quantity}</td>
@@ -476,11 +492,11 @@ function buildDetailedBillHtml(
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
-  const svcHead = `<tr><th>#</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th>${svcHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Amount</th><th class="right">GST</th></tr>`;
+  const svcHead = `<tr><th>#</th><th>Date</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th>${svcHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Amount</th><th class="right">GST</th></tr>`;
   const svcCols = svcHasDisc
-    ? `<colgroup><col style="width:4%"><col style="width:28%"><col style="width:18%"><col style="width:6%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:8%"></colgroup>`
-    : `<colgroup><col style="width:5%"><col style="width:33%"><col style="width:20%"><col style="width:7%"><col style="width:15%"><col style="width:12%"><col style="width:8%"></colgroup>`;
-  const svcFoot = `<tr class="total-row"><td colspan="5">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
+    ? `<colgroup><col style="width:4%"><col style="width:10%"><col style="width:22%"><col style="width:15%"><col style="width:6%"><col style="width:10%"><col style="width:11%"><col style="width:14%"><col style="width:8%"></colgroup>`
+    : `<colgroup><col style="width:4%"><col style="width:11%"><col style="width:29%"><col style="width:18%"><col style="width:7%"><col style="width:12%"><col style="width:11%"><col style="width:8%"></colgroup>`;
+  const svcFoot = `<tr class="total-row"><td colspan="6">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
 
   const invHead = `<tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr>`;
   const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
@@ -511,7 +527,8 @@ function buildDetailedBillHtml(
     ...(pharmBills.length > 0
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
-      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary),
+      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
+      doctorGross, doctorDiscount),
   ]);
 }
 
@@ -541,7 +558,10 @@ function buildSummaryBillHtml(
   discHidden: DiscPrintHidden = NO_DISC_HIDDEN,
 ) {
   let bedGstTotal = 0, invGstTotal = 0, pharmGstTotal = 0;
-  const doctorBox = doctorServiceBoxHtml(entries.filter(e => e.doctorName), patient.referredBy, fmt, fmtDate);
+  const doctorEntries  = entries.filter(e => e.doctorName);
+  const doctorBox = doctorServiceBoxHtml(doctorEntries, patient.referredBy, fmt, fmtDate);
+  const doctorGross    = doctorEntries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const doctorDiscount = doctorEntries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
 
   // Hide a section's Discount column when it was toggled off for print, or when
   // no item in that section is discounted.
@@ -664,7 +684,8 @@ function buildSummaryBillHtml(
     ...((pharmTotal > 0 || pharmacyReturn > 0)
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
-      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary),
+      visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
+      doctorGross, doctorDiscount),
   ]);
 }
 
@@ -821,7 +842,15 @@ export default function IpdBilling() {
 
   // ── Derived totals ────────────────────────────────────────────────────────────
 
-  const serviceGroups = entries.reduce<
+  // Doctor / consultation entries are billed on their own line (see the
+  // "Doctor / Consultation Services" box + the Bill Summary line); every other
+  // entry is a regular Nursing Home service. Keeping the two apart means the
+  // consultation amount is shown explicitly instead of being folded, invisibly,
+  // into the Nursing Home Charge figure.
+  const regularEntries   = entries.filter(e => !e.doctorName);
+  const doctorEntries    = entries.filter(e => e.doctorName);
+
+  const serviceGroups = regularEntries.reduce<
     Record<string, { entries: BillingEntry[]; gross: number; discount: number; net: number }>
   >((acc, e) => {
     const key = e.serviceGroup || "Other";
@@ -834,18 +863,27 @@ export default function IpdBilling() {
     return acc;
   }, {});
 
-  const doctorEntries    = entries.filter(e => e.doctorName);
+  const doctorGross      = doctorEntries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const doctorDiscount   = doctorEntries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
   const doctorTotal      = doctorEntries.reduce((s, e) => s + e.totalCharge, 0);
-  const servicesGross    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
-  const servicesDiscount = entries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
-  const servicesNet      = entries.reduce((s, e) => s + e.totalCharge, 0);
+  const servicesGross    = regularEntries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const servicesDiscount = regularEntries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
+  const servicesNet      = regularEntries.reduce((s, e) => s + e.totalCharge, 0);
   const invTotal         = investigations.reduce((s, i) => s + (i.totalAmount || 0), 0);
   const pharmGross       = pharmBills.reduce((s, b) => s + (b.netAmount || 0), 0);
   const pharmacyReturn   = patient.pharmacyReturn || 0;
   const pharmTotal       = Math.max(0, pharmGross - pharmacyReturn);
 
-  // Per-section discount rows (services / investigation / pharmacy) for the Bill Summary
-  const discountSections   = buildDiscountSections(entries, investigations, pharmBills);
+  // Per-section discount rows (services / doctor / investigation / pharmacy) for
+  // the Bill Summary — disclosure only, no total impact.
+  const discountSections   = (() => {
+    const secs = buildDiscountSections(regularEntries, investigations, pharmBills);
+    if (doctorDiscount > 0.001) {
+      const i = secs.findIndex(s => s.section === "Services");
+      secs.splice(i >= 0 ? i + 1 : 0, 0, { section: "Doctor / Consultation", total: Math.round(doctorDiscount * 100) / 100 });
+    }
+    return secs;
+  })();
 
   // Bed charge from allotments; fall back to patient bed × manually chosen estimate date
   const fallbackRate = (patient.bedCategory && !isBedChargeExempt(patient.department)) ? (BED_CHARGES[patient.bedCategory] ?? 0) : 0;
@@ -897,8 +935,8 @@ export default function IpdBilling() {
   const gstBreakdown  = [...bedGstItems, ...svcGstItems, ...invGstItems, ...pharmGstItems];
   const totalGst      = bedGstTotal + svcGstTotal + invGstTotal + pharmGstTotal;
 
-  const totalCharge    = totalBedCharge + servicesGross + invTotal + pharmTotal;
-  const preDiscTotal   = totalCharge - servicesDiscount;
+  const totalCharge    = totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal;
+  const preDiscTotal   = totalCharge - servicesDiscount - doctorDiscount;
   const billDiscAmt    = billDiscSaved != null
     ? (billDiscType === "percent" ? preDiscTotal * billDiscSaved / 100 : billDiscSaved)
     : 0;
@@ -1399,6 +1437,7 @@ export default function IpdBilling() {
                         <thead>
                           <tr className="text-gray-400 uppercase border-b">
                             <th className="px-4 py-1 text-left font-medium">#</th>
+                            <th className="px-4 py-1 text-left font-medium">Date</th>
                             <th className="px-4 py-1 text-left font-medium">Description</th>
                             <th className="px-4 py-1 text-left font-medium">Category</th>
                             <th className="px-4 py-1 text-right font-medium">Lab Amt</th>
@@ -1410,6 +1449,7 @@ export default function IpdBilling() {
                           {inv.items.map((it, i) => (
                             <tr key={i} className="border-t border-gray-100">
                               <td className="px-4 py-1.5 text-gray-400">{it.slNo || i + 1}</td>
+                              <td className="px-4 py-1.5 text-gray-500 whitespace-nowrap">{fmtDate(inv.reqDate)}</td>
                               <td className="px-4 py-1.5 font-medium">{it.description}</td>
                               <td className="px-4 py-1.5 text-gray-500">{it.category || "—"}</td>
                               <td className="px-4 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
@@ -1457,6 +1497,7 @@ export default function IpdBilling() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-gray-400 uppercase border-b">
+                          <th className="px-4 py-1 text-left font-medium">Date</th>
                           <th className="px-4 py-1 text-left font-medium">Item</th>
                           <th className="px-4 py-1 text-left font-medium">Package</th>
                           <th className="px-4 py-1 text-center font-medium">Qty</th>
@@ -1469,6 +1510,7 @@ export default function IpdBilling() {
                       <tbody>
                         {bill.items.map((it, i) => (
                           <tr key={i} className="border-t border-gray-100">
+                            <td className="px-4 py-1.5 text-gray-500 whitespace-nowrap">{fmtDate(bill.billDate)}</td>
                             <td className="px-4 py-1.5 font-medium">{it.itemName}</td>
                             <td className="px-4 py-1.5 text-gray-500">{it.package || "—"}</td>
                             <td className="px-4 py-1.5 text-center">{it.qty}</td>
@@ -1520,6 +1562,12 @@ export default function IpdBilling() {
                     <span className="text-gray-600">Nursing Home Charge</span>
                     <span className="font-medium">{fmt(servicesGross)}</span>
                   </div>
+                  {doctorEntries.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Doctor / Consultation Charge</span>
+                      <span className="font-medium">{fmt(doctorGross)}</span>
+                    </div>
+                  )}
                   {invTotal > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Investigations</span>
@@ -1756,8 +1804,8 @@ export default function IpdBilling() {
                     <tr className="border-t-2 bg-gray-50 font-semibold">
                       <td colSpan={4} className="px-3 py-2">Services Total</td>
                       <td className="px-3 py-2 text-center">{entries.reduce((s, e) => s + e.quantity, 0)}</td>
-                      <td className="px-3 py-2 text-right">{fmt(servicesNet)}</td>
-                      <td className="px-3 py-2 text-right text-red-600">{servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>
+                      <td className="px-3 py-2 text-right">{fmt(servicesNet + doctorTotal)}</td>
+                      <td className="px-3 py-2 text-right text-red-600">{(servicesDiscount + doctorDiscount) > 0 ? fmt(servicesDiscount + doctorDiscount) : "—"}</td>
                       <td className="px-3 py-2 text-right text-emerald-700">{svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td>
                       <td></td>
                     </tr>
