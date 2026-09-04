@@ -136,27 +136,28 @@ export function buildServiceGroups(
   return [...metaGroups, ...extraGroups.values()];
 }
 
-// ─── Billing day calculation (first day = 24h from admission, then noon-to-noon) ───
-// Day 1 runs a full 24 hours from the exact admission/allotment instant.
-// Every day after that is a 12:00 PM IST → 11:59 AM IST noon-to-noon block:
-// day 2 begins at the first noon IST at or after the end of day 1, and each
-// subsequent noon crossed adds one more day. The window between the end of
-// day 1 and that first noon is still counted as day 1 (no partial-day bump).
+// ─── Billing day calculation (day 1 ends noon next day, then noon-to-noon) ───
+// Day 1 runs from the exact admission/allotment instant until 12:00 PM IST
+// of the calendar day immediately after the admission date — regardless of
+// what time on that admission date the patient was admitted. Day 2 begins
+// right after that noon, and every following noon crossed adds one more day.
 //
-//   Admitted 6 PM Sep 2 → day 1 ends 6 PM Sep 3 → day 2 starts 12 PM Sep 4
-//                        → day 3 starts 12 PM Sep 5 …
-//   Admitted 9 AM Sep 2 → day 1 ends 9 AM Sep 3 → day 2 starts 12 PM Sep 3
-//                        → day 3 starts 12 PM Sep 4 …
+//   Admitted 9 PM Sep 1 → day 1 ends 12 PM Sep 2 → day 2 starts 12 PM Sep 2
+//                        → day 3 starts 12 PM Sep 3 …
+//   Admitted 9 AM Sep 1 → day 1 ends 12 PM Sep 2 → day 2 starts 12 PM Sep 2
+//                        → day 3 starts 12 PM Sep 3 …
 export function computeBillingDays(admissionDate: Date | string, currentDate = new Date()): number {
   const adm = typeof admissionDate === "string" ? new Date(admissionDate) : admissionDate;
   const IST  = 5.5 * 3600000;
   const NOON = 12 * 3600000;
   const DAY  = 86400000;
-  const day1End = adm.getTime() + DAY;
-  // noon-day index: increments each time an instant crosses 12:00 PM IST
-  const noonDay = (t: number) => Math.floor((t + IST - NOON) / DAY);
-  const noonsPassed = noonDay(currentDate.getTime()) - noonDay(day1End);
-  return 1 + Math.max(0, noonsPassed);
+  // Start of the admission's IST calendar day, in IST wall-clock ("shifted") ms.
+  const admDayStart = Math.floor((adm.getTime() + IST) / DAY) * DAY;
+  // 12:00 PM IST of the day after admission, converted back to a real instant.
+  const firstNoon = admDayStart + DAY + NOON - IST;
+  if (currentDate.getTime() < firstNoon) return 1;
+  const extraDays = Math.floor((currentDate.getTime() - firstNoon) / DAY);
+  return 2 + extraDays;
 }
 
 // ─── Per-section discount breakdown for the Bill Summary ──────────────────────

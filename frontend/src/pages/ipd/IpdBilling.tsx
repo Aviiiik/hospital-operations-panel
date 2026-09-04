@@ -449,12 +449,13 @@ function buildDetailedBillHtml(
       invGstTotal += g;
       return `
     <tr>
-      <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
+      <td style="font-family:monospace;font-size:10px;white-space:nowrap">${inv.reqNo}</td>
       <td>${fmtDate(inv.reqDate)}</td>
+      <td>${inv.vendor || "—"}</td>
       <td>${it.description}</td>
       <td>${it.category || "—"}</td>
-      <td class="right bold">${fmt(it.netAmount || 0)}</td>
-      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+      <td class="right bold" style="white-space:nowrap">${fmt(it.netAmount || 0)}</td>
+      <td class="right" style="white-space:nowrap">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
     })
   );
@@ -465,15 +466,16 @@ function buildDetailedBillHtml(
       pharmGstTotal += g;
       return `
     <tr>
-      <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
+      <td style="font-family:monospace;font-size:10px;white-space:nowrap">${bill.vendorBillNo || "—"}</td>
       <td>${fmtDate(bill.billDate)}</td>
+      <td>${bill.vendor || "—"}</td>
       <td>${it.itemName}</td>
       <td>${it.package || "—"}</td>
       <td class="center">${it.qty}</td>
-      <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-      ${pharmHasDisc ? `<td class="center">${it.discount || 0}${it.discountType || "%"}</td>` : ""}
-      <td class="right bold">${fmt(it.netAmount)}</td>
-      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+      <td class="right" style="white-space:nowrap">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
+      ${pharmHasDisc ? `<td class="center" style="white-space:nowrap">${it.discount || 0}${it.discountType || "%"}</td>` : ""}
+      <td class="right bold" style="white-space:nowrap">${fmt(it.netAmount)}</td>
+      <td class="right" style="white-space:nowrap">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
     })
   );
@@ -498,15 +500,15 @@ function buildDetailedBillHtml(
     : `<colgroup><col style="width:4%"><col style="width:11%"><col style="width:29%"><col style="width:18%"><col style="width:7%"><col style="width:12%"><col style="width:11%"><col style="width:8%"></colgroup>`;
   const svcFoot = `<tr class="total-row"><td colspan="6">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
 
-  const invHead = `<tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr>`;
-  const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
-  const invFoot = `<tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
+  const invHead = `<tr><th style="white-space:nowrap">Req No</th><th style="white-space:nowrap">Date</th><th style="white-space:nowrap">Vendor</th><th>Description</th><th style="white-space:nowrap">Category</th><th class="right" style="white-space:nowrap">Net Amt</th><th class="right" style="white-space:nowrap">GST</th></tr>`;
+  const invCols = `<colgroup><col style="width:15%"><col style="width:13%"><col style="width:11%"><col style="width:22%"><col style="width:10%"><col style="width:15%"><col style="width:14%"></colgroup>`;
+  const invFoot = `<tr class="total-row"><td colspan="5">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
 
-  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center" style="white-space:nowrap">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
+  const pharmHead = `<tr><th style="white-space:nowrap">Bill No</th><th style="white-space:nowrap">Date</th><th style="white-space:nowrap">Vendor</th><th>Item</th><th style="white-space:nowrap">Package</th><th class="center" style="white-space:nowrap">Qty</th><th class="right" style="white-space:nowrap">MRP</th>${pharmHasDisc ? `<th class="center" style="white-space:nowrap">Discount</th>` : ""}<th class="right" style="white-space:nowrap">Net Amt</th><th class="right" style="white-space:nowrap">GST</th></tr>`;
   const pharmCols = pharmHasDisc
-    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:19%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:10%"></colgroup>`
-    : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
-  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
+    ? `<colgroup><col style="width:13%"><col style="width:12%"><col style="width:9%"><col style="width:11%"><col style="width:7%"><col style="width:5%"><col style="width:11%"><col style="width:8%"><col style="width:14%"><col style="width:10%"></colgroup>`
+    : `<colgroup><col style="width:14%"><col style="width:13%"><col style="width:10%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:12%"><col style="width:13%"><col style="width:10%"></colgroup>`;
+  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan + 1}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan + 1}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan + 1}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
   const { header: billHeader, intro: billIntro } = billHeaderHtml(logo, billType, patient);
   return wrapPrintDoc(billHeader, [
@@ -566,8 +568,6 @@ function buildSummaryBillHtml(
   // Hide a section's Discount column when it was toggled off for print, or when
   // no item in that section is discounted.
   const grpHasDisc   = !discHidden.services && Object.values(serviceGroups).some(d => d.discount > 0);
-  const pharmHasDisc = !discHidden.pharmacy && pharmBills.some((b: any) => b.items.some((it: any) => Number(it.discount) > 0));
-  const pharmSpan    = pharmHasDisc ? 7 : 6;
 
   const bedSummaryRows = bedAllotments.length > 0
     ? bedAllotments.map(a => {
@@ -607,48 +607,36 @@ function buildSummaryBillHtml(
       <td class="right bold">${fmt(data.net)}</td>
     </tr>`).join("");
 
-  const invRowArr = investigations.flatMap(inv =>
-    (inv.items || []).filter((it: any) => it.description).map((it: any) => {
-      const g = gstAmt(it.netAmount || 0, it.gst, it.gstType);
-      invGstTotal += g;
-      return `
-      <tr>
-        <td style="font-family:monospace;font-size:10px">${inv.reqNo}</td>
-        <td>${fmtDate(inv.reqDate)}</td>
-        <td>${it.description}</td>
-        <td>${it.category || "—"}</td>
-        <td class="right bold">${fmt(it.netAmount || 0)}</td>
-        <td class="right">${g > 0 ? fmt(g) : "—"}</td>
-      </tr>`;
-    })
-  );
-  const invHead = `<tr><th>Req No</th><th>Date</th><th>Description</th><th>Category</th><th class="right">Net Amt</th><th class="right">GST</th></tr>`;
-  const invCols = `<colgroup><col style="width:14%"><col style="width:12%"><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>`;
-  const invFoot = `<tr class="total-row"><td colspan="4">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
+  // Summary bill shows totals only for Investigations/Pharmacy (no item rows) —
+  // still need the per-item GST sums for the total lines.
+  investigations.forEach(inv => {
+    (inv.items || []).filter((it: any) => it.description).forEach((it: any) => {
+      invGstTotal += gstAmt(it.netAmount || 0, it.gst, it.gstType);
+    });
+  });
+  const invSection = `
+<h2>Investigations</h2>
+<table>
+  <thead><tr><th>Description</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
+  <tbody>
+    <tr class="total-row"><td>Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
+  </tbody>
+</table>`;
 
-  const pharmRowArr = pharmBills.flatMap((bill: any) =>
-    bill.items.map((it: any) => {
-      const g = gstAmt(it.netAmount, it.gst, it.gstType);
-      pharmGstTotal += g;
-      return `
-      <tr>
-        <td style="font-family:monospace;font-size:10px">${bill.vendorBillNo || "—"}</td>
-        <td>${fmtDate(bill.billDate)}</td>
-        <td>${it.itemName}</td>
-        <td>${it.package || "—"}</td>
-        <td class="center">${it.qty}</td>
-        <td class="right">${fmt(parseFloat(String(it.mrp)) || 0)}</td>
-        ${pharmHasDisc ? `<td class="center">${it.discount || 0}${it.discountType || "%"}</td>` : ""}
-        <td class="right bold">${fmt(it.netAmount)}</td>
-        <td class="right">${g > 0 ? fmt(g) : "—"}</td>
-      </tr>`;
-    })
-  );
-  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Item</th><th>Package</th><th class="center">Qty</th><th class="right">MRP</th>${pharmHasDisc ? `<th class="center" style="white-space:nowrap">Discount</th>` : ""}<th class="right">Net Amt</th><th class="right">GST</th></tr>`;
-  const pharmCols = pharmHasDisc
-    ? `<colgroup><col style="width:10%"><col style="width:10%"><col style="width:19%"><col style="width:12%"><col style="width:6%"><col style="width:10%"><col style="width:12%"><col style="width:11%"><col style="width:10%"></colgroup>`
-    : `<colgroup><col style="width:11%"><col style="width:11%"><col style="width:26%"><col style="width:13%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>`;
-  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
+  pharmBills.forEach((bill: any) => {
+    bill.items.forEach((it: any) => {
+      pharmGstTotal += gstAmt(it.netAmount, it.gst, it.gstType);
+    });
+  });
+  const pharmSection = `
+<h2>Pharmacy</h2>
+<table>
+  <thead><tr><th>Description</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
+  <tbody>
+    ${pharmacyReturn > 0 ? `<tr class="total-row"><td>Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row" style="color:#ef4444"><td>(-) Pharmacy Return</td><td class="right">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
+    <tr class="total-row"><td>Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
+  </tbody>
+</table>`;
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
@@ -679,10 +667,8 @@ function buildSummaryBillHtml(
   </tbody>
 </table>`,
     doctorBox,
-    ...(invTotal > 0
-      ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
-    ...((pharmTotal > 0 || pharmacyReturn > 0)
-      ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
+    invTotal > 0 ? invSection : "",
+    (pharmTotal > 0 || pharmacyReturn > 0) ? pharmSection : "",
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
       visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
       doctorGross, doctorDiscount),
@@ -1829,6 +1815,7 @@ export default function IpdBilling() {
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                       <th className="text-left px-3 py-2 font-medium">Req No</th>
                       <th className="text-left px-3 py-2 font-medium">Date</th>
+                      <th className="text-left px-3 py-2 font-medium">Vendor</th>
                       <th className="text-left px-3 py-2 font-medium">Description</th>
                       <th className="text-left px-3 py-2 font-medium">Category</th>
                       <th className="text-right px-3 py-2 font-medium">Lab Amt</th>
@@ -1842,6 +1829,7 @@ export default function IpdBilling() {
                         <tr key={`${inv._id}-${i}`} className="border-t">
                           <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{inv.reqNo}</td>
                           <td className="px-3 py-1.5 text-xs text-gray-500">{fmtDate(inv.reqDate)}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{inv.vendor || "—"}</td>
                           <td className="px-3 py-1.5">{it.description}</td>
                           <td className="px-3 py-1.5 text-gray-500">{it.category || "—"}</td>
                           <td className="px-3 py-1.5 text-right text-gray-500">{it.amount > 0 ? fmt(it.amount) : "—"}</td>
@@ -1856,7 +1844,7 @@ export default function IpdBilling() {
                       ))
                     )}
                     <tr className="border-t-2 bg-gray-50 font-semibold">
-                      <td colSpan={5} className="px-3 py-2">Investigations Total</td>
+                      <td colSpan={6} className="px-3 py-2">Investigations Total</td>
                       <td className="px-3 py-2 text-right text-purple-700">{fmt(invTotal)}</td>
                       <td className="px-3 py-2 text-right text-emerald-700">{invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td>
                     </tr>
@@ -1880,6 +1868,7 @@ export default function IpdBilling() {
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                       <th className="text-left px-3 py-2 font-medium">Bill No</th>
                       <th className="text-left px-3 py-2 font-medium">Date</th>
+                      <th className="text-left px-3 py-2 font-medium">Vendor</th>
                       <th className="text-left px-3 py-2 font-medium">Item</th>
                       <th className="text-left px-3 py-2 font-medium">Package</th>
                       <th className="text-center px-3 py-2 font-medium">Qty</th>
@@ -1895,6 +1884,7 @@ export default function IpdBilling() {
                         <tr key={`${bill._id}-${i}`} className="border-t">
                           <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{bill.vendorBillNo || "—"}</td>
                           <td className="px-3 py-1.5 text-xs text-gray-500">{fmtDate(bill.billDate)}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{bill.vendor || "—"}</td>
                           <td className="px-3 py-1.5 font-medium">{it.itemName}</td>
                           <td className="px-3 py-1.5 text-gray-500">{it.package || "—"}</td>
                           <td className="px-3 py-1.5 text-center">{it.qty}</td>
@@ -1913,19 +1903,19 @@ export default function IpdBilling() {
                     {pharmacyReturn > 0 && (
                       <>
                         <tr className="border-t bg-gray-50">
-                          <td colSpan={7} className="px-3 py-2">Pharmacy Sub Total</td>
+                          <td colSpan={8} className="px-3 py-2">Pharmacy Sub Total</td>
                           <td className="px-3 py-2 text-right">{fmt(pharmGross)}</td>
                           <td></td>
                         </tr>
                         <tr className="border-t bg-gray-50">
-                          <td colSpan={7} className="px-3 py-2 text-red-500">(-) Pharmacy Return</td>
+                          <td colSpan={8} className="px-3 py-2 text-red-500">(-) Pharmacy Return</td>
                           <td className="px-3 py-2 text-right text-red-500">{fmt(pharmacyReturn)}</td>
                           <td></td>
                         </tr>
                       </>
                     )}
                     <tr className="border-t-2 bg-gray-50 font-semibold">
-                      <td colSpan={7} className="px-3 py-2">Pharmacy Total</td>
+                      <td colSpan={8} className="px-3 py-2">Pharmacy Total</td>
                       <td className="px-3 py-2 text-right text-green-700">{fmt(pharmTotal)}</td>
                       <td className="px-3 py-2 text-right text-emerald-700">{pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td>
                     </tr>
