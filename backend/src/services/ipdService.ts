@@ -685,6 +685,7 @@ export async function createReceipt(patientId: string, data: any) {
     chequeNo:      data.chequeNo      || "",
     chequeRefNo:   data.chequeRefNo   || "",
     transactionId: data.transactionId || "",
+    bank:          data.bank          || "",
     createdBy:     data.createdBy     || "",
   });
   await receipt.save();
@@ -693,7 +694,7 @@ export async function createReceipt(patientId: string, data: any) {
 
 export async function updateReceipt(id: string, data: any) {
   const allowed = ["receiptDate", "receiptAmount", "receiptMode", "remarks",
-    "tds", "disallowed", "refund", "chequeNo", "chequeRefNo", "transactionId"];
+    "tds", "disallowed", "refund", "chequeNo", "chequeRefNo", "transactionId", "bank"];
   const update: any = {};
   allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
   if (update.receiptDate) update.receiptDate = new Date(update.receiptDate);

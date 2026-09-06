@@ -14,6 +14,7 @@ const ipdReceiptSchema = new mongoose.Schema({
   chequeNo:      { type: String },
   chequeRefNo:   { type: String },
   transactionId: { type: String },
+  bank:          { type: String },
   createdBy:     { type: String },
 }, { timestamps: true });
 

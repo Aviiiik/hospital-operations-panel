@@ -607,36 +607,46 @@ function buildSummaryBillHtml(
       <td class="right bold">${fmt(data.net)}</td>
     </tr>`).join("");
 
-  // Summary bill shows totals only for Investigations/Pharmacy (no item rows) —
-  // still need the per-item GST sums for the total lines.
-  investigations.forEach(inv => {
-    (inv.items || []).filter((it: any) => it.description).forEach((it: any) => {
-      invGstTotal += gstAmt(it.netAmount || 0, it.gst, it.gstType);
-    });
-  });
-  const invSection = `
-<h2>Investigations</h2>
-<table>
-  <thead><tr><th>Description</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    <tr class="total-row"><td>Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>`;
+  // Summary bill shows one row per Investigation requisition / Pharmacy bill
+  // (not per line item) — with each bill's date, sorted ascending — followed
+  // by the section total.
+  const sortedInvestigations = [...investigations].sort((a: any, b: any) =>
+    new Date(a.reqDate).getTime() - new Date(b.reqDate).getTime());
+  const sortedPharmBills = [...pharmBills].sort((a: any, b: any) =>
+    new Date(a.billDate).getTime() - new Date(b.billDate).getTime());
 
-  pharmBills.forEach((bill: any) => {
-    bill.items.forEach((it: any) => {
-      pharmGstTotal += gstAmt(it.netAmount, it.gst, it.gstType);
-    });
+  const invRowArr = sortedInvestigations.map((inv: any) => {
+    const g = (inv.items || []).filter((it: any) => it.description)
+      .reduce((s: number, it: any) => s + gstAmt(it.netAmount || 0, it.gst, it.gstType), 0);
+    invGstTotal += g;
+    return `
+    <tr>
+      <td style="font-family:monospace;font-size:10px;white-space:nowrap">${inv.reqNo || "—"}</td>
+      <td>${fmtDate(inv.reqDate)}</td>
+      <td>${inv.vendor || "—"}</td>
+      <td class="right bold">${fmt(inv.totalAmount || 0)}</td>
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+    </tr>`;
   });
-  const pharmSection = `
-<h2>Pharmacy</h2>
-<table>
-  <thead><tr><th>Description</th><th class="right">Amount</th><th class="right">GST</th></tr></thead>
-  <tbody>
-    ${pharmacyReturn > 0 ? `<tr class="total-row"><td>Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row" style="color:#ef4444"><td>(-) Pharmacy Return</td><td class="right">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}
-    <tr class="total-row"><td>Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>
-  </tbody>
-</table>`;
+  const invHead = `<tr><th>Req No</th><th>Date</th><th>Vendor</th><th class="right">Amount</th><th class="right">GST</th></tr>`;
+  const invCols = `<colgroup><col style="width:20%"><col style="width:16%"><col style="width:24%"><col style="width:20%"><col style="width:20%"></colgroup>`;
+  const invFoot = `<tr class="total-row"><td colspan="3">Investigations Total</td><td class="right">${fmt(invTotal)}</td><td class="right">${invGstTotal > 0 ? fmt(invGstTotal) : "—"}</td></tr>`;
+
+  const pharmRowArr = sortedPharmBills.map((bill: any) => {
+    const g = bill.items.reduce((s: number, it: any) => s + gstAmt(it.netAmount, it.gst, it.gstType), 0);
+    pharmGstTotal += g;
+    return `
+    <tr>
+      <td style="font-family:monospace;font-size:10px;white-space:nowrap">${bill.billNo || bill.vendorBillNo || "—"}</td>
+      <td>${fmtDate(bill.billDate)}</td>
+      <td>${bill.vendor || "—"}</td>
+      <td class="right bold">${fmt(bill.netAmount || 0)}</td>
+      <td class="right">${g > 0 ? fmt(g) : "—"}</td>
+    </tr>`;
+  });
+  const pharmHead = `<tr><th>Bill No</th><th>Date</th><th>Vendor</th><th class="right">Amount</th><th class="right">GST</th></tr>`;
+  const pharmCols = `<colgroup><col style="width:20%"><col style="width:16%"><col style="width:24%"><col style="width:20%"><col style="width:20%"></colgroup>`;
+  const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="3">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row" style="color:#ef4444"><td colspan="3">(-) Pharmacy Return</td><td class="right">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="3">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
@@ -667,8 +677,10 @@ function buildSummaryBillHtml(
   </tbody>
 </table>`,
     doctorBox,
-    invTotal > 0 ? invSection : "",
-    (pharmTotal > 0 || pharmacyReturn > 0) ? pharmSection : "",
+    ...(investigations.length > 0
+      ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
+    ...(pharmBills.length > 0
+      ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
       visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
       doctorGross, doctorDiscount),
