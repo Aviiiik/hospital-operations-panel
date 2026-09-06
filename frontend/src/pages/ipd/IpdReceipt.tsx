@@ -102,6 +102,7 @@ interface ReceiptEntry {
   chequeNo?: string;
   chequeRefNo?: string;
   transactionId?: string;
+  bank?: string;
 }
 
 const BLANK = {
@@ -115,6 +116,7 @@ const BLANK = {
   chequeNo:      "",
   chequeRefNo:   "",
   transactionId: "",
+  bank:          "",
 };
 
 // ── Single receipt print ──────────────────────────────────────────────────────
@@ -122,14 +124,12 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   const now = new Date();
   const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"})
     + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"});
-  const payDetail = (() => {
-    if (receipt.receiptMode === "CASH") return "";
-    const parts: string[] = [];
-    if (receipt.transactionId) parts.push(`Txn ID: ${receipt.transactionId}`);
-    if (receipt.chequeNo)      parts.push(`Cheque No: ${receipt.chequeNo}`);
-    if (receipt.chequeRefNo)   parts.push(`Ref: ${receipt.chequeRefNo}`);
-    return parts.join(" | ");
-  })();
+  // Optional columns — each rendered only when the receipt actually carries a value.
+  const optCols: { th: string; td: string }[] = [];
+  if (receipt.transactionId) optCols.push({ th: "Txn ID",    td: receipt.transactionId });
+  if (receipt.chequeNo)      optCols.push({ th: "Cheque No", td: receipt.chequeNo });
+  if (receipt.chequeRefNo)   optCols.push({ th: "Ref",       td: receipt.chequeRefNo });
+  if (receipt.bank)          optCols.push({ th: "Bank",      td: receipt.bank });
   const css = `${PRINT_CSS}
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:12px}
   .il{font-size:10px;color:#6b7280}.iv{font-weight:600;font-size:12px}
@@ -148,13 +148,13 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
   <div><div class="il">Attended By</div><div class="iv">${patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</div></div>
 </div>
 <table>
-  <thead><tr><th>Receipt No</th><th>Date</th><th>Mode</th><th>Reference / Txn ID</th><th>Remarks</th><th class="right">Amount</th></tr></thead>
+  <thead><tr><th>Receipt No</th><th>Date</th><th>Mode</th>${optCols.map(c => `<th>${c.th}</th>`).join("")}<th>Remarks</th><th class="right">Amount</th></tr></thead>
   <tbody>
     <tr>
       <td style="font-family:monospace">${receipt.receiptNo}</td>
       <td>${fmtDate(receipt.receiptDate)}</td>
       <td>${receipt.receiptMode}</td>
-      <td>${payDetail || "—"}</td>
+      ${optCols.map(c => `<td>${c.td}</td>`).join("")}
       <td>${receipt.remarks || "—"}</td>
       <td class="right" style="font-weight:bold">${fmtAmt(receipt.receiptAmount)}</td>
     </tr>
@@ -251,8 +251,8 @@ function printAllReceipts(
 
   const paymentRows = receipts.map(r => {
     const line1 = `${fmtDateShort(r.receiptDate)}, Received: ${fmtAmt(r.receiptAmount)}, ${r.receiptMode}${r.remarks ? ", " + r.remarks : ""}`;
-    const ref = r.transactionId || r.chequeNo
-      ? `(${[r.transactionId, r.chequeNo ? "Cheque: "+r.chequeNo : "", r.chequeRefNo].filter(Boolean).join(" | ")})`
+    const ref = r.transactionId || r.chequeNo || r.bank
+      ? `(${[r.transactionId, r.chequeNo ? "Cheque: "+r.chequeNo : "", r.chequeRefNo, r.bank ? "Bank: "+r.bank : ""].filter(Boolean).join(" | ")})`
       : "";
     return `<tr>
       <td>${line1}${ref ? `<br/><span style="color:#555">${ref}</span>` : ""}</td>
@@ -480,6 +480,7 @@ export default function IpdReceipt() {
       chequeNo:      r.chequeNo || "",
       chequeRefNo:   r.chequeRefNo || "",
       transactionId: r.transactionId || "",
+      bank:          r.bank || "",
     });
     setShowForm(true);
   };
@@ -675,6 +676,18 @@ export default function IpdReceipt() {
                     value={form.transactionId}
                     onChange={e => set("transactionId", e.target.value)}
                     placeholder={form.receiptMode === "UPI" ? "UPI transaction ID" : form.receiptMode === "NEFT" ? "NEFT reference no." : "Reference number"}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              )}
+
+              {isNonCash && (
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Bank</Label>
+                  <Input
+                    value={form.bank}
+                    onChange={e => set("bank", e.target.value)}
+                    placeholder="Bank name (optional)"
                     className="h-9 text-sm"
                   />
                 </div>

@@ -82,7 +82,7 @@ function fmtMoney(n: number) {
 }
 
 // ─── Build the print sections for one requisition ─────────────────────────────
-function invRequisitionSections(patient: any, inv: Investigation, pageBreakBefore = false) {
+function invRequisitionSections(patient: any, inv: Investigation) {
   const rowArr = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
     <tr>
       <td class="center">${i + 1}</td>
@@ -95,7 +95,7 @@ function invRequisitionSections(patient: any, inv: Investigation, pageBreakBefor
     </tr>`);
 
   const infoBlock = `
-<div class="info-grid"${pageBreakBefore ? ' style="page-break-before:always"' : ""}>
+<div class="info-grid">
   <div><div class="info-label">Req No</div><div class="info-val" style="font-family:monospace">${inv.reqNo}</div></div>
   <div><div class="info-label">Req Date / Time</div><div class="info-val">${fmtDate(inv.reqDate)} ${inv.reqTime || ""}</div></div>
   <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
@@ -134,18 +134,62 @@ function printInvestigationRequisition(patient: any, inv: Investigation, logo: s
   openIpdPrintWindow(`Investigation Requisition — ${inv.reqNo}`, body);
 }
 
-// ─── Print every investigation requisition for this patient ───────────────────
+// ─── Print every investigation requisition for the admission in one document ──
 function printAllInvestigationRequisitions(patient: any, invs: Investigation[], logo: string) {
   if (!invs.length) {
     toast.error("No requisitions to print");
     return;
   }
-  const sections = invs.flatMap((inv, idx) =>
-    invRequisitionSections(patient, inv, idx > 0),
-  );
+
+  const invHead = `<tr><th class="center">#</th><th>Description</th><th>Category</th><th>Case No</th><th>Report Date</th><th class="right">Lab Amt</th><th class="right">Net Amt</th></tr>`;
+  const invCols = `<colgroup><col style="width:5%"><col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:14%"><col style="width:11%"><col style="width:11%"></colgroup>`;
+
+  const grandTotal = invs.reduce((s, inv) => s + (inv.totalAmount || 0), 0);
+
+  const infoBlock = `
+<div class="info-grid">
+  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
+  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
+  <div><div class="info-label">Age / Sex</div><div class="info-val">${patient.ageYears ? patient.ageYears + "Y " : ""}${patient.gender || "—"}</div></div>
+  <div><div class="info-label">Requisitions</div><div class="info-val">${invs.length}</div></div>
+  <div><div class="info-label">Printed</div><div class="info-val">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div></div>
+</div>`;
+
+  const reqSections = invs.flatMap(inv => {
+    const rowArr = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td>${it.description}</td>
+      <td>${it.category || "—"}</td>
+      <td>${it.caseNo || "—"}</td>
+      <td>${it.reportDate ? fmtDate(it.reportDate) : "—"}</td>
+      <td class="right">${it.amount > 0 ? fmtMoney(it.amount) : "—"}</td>
+      <td class="right bold">${fmtMoney(it.netAmount || 0)}</td>
+    </tr>`);
+    const heading = `${inv.reqNo} · ${fmtDate(inv.reqDate)}${inv.reqTime ? " " + inv.reqTime : ""}`
+      + `${inv.collectionCentre ? " · " + inv.collectionCentre : ""}`
+      + `${inv.vendor ? " · " + inv.vendor : ""}`
+      + `${inv.referredBy ? " · Ref: " + inv.referredBy : ""}`
+      + `${inv.isUrgent ? " · URGENT" : ""}`;
+    const foot = `<tr class="total-row"><td colspan="6">Requisition Total</td><td class="right">${fmtMoney(inv.totalAmount || 0)}</td></tr>`;
+    return chunkTableSections(heading, invCols, invHead, rowArr, foot);
+  });
+
+  const grandSection = `
+<h2>Grand Total</h2>
+<table><tbody>
+  <tr class="total-row"><td>Total — ${invs.length} requisition${invs.length !== 1 ? "s" : ""}</td><td class="right">${fmtMoney(grandTotal)}</td></tr>
+</tbody></table>`;
+
+  const sigBlock = `
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>`;
+
   const body = wrapPrintDoc(
     hospitalHeaderHtml(logo),
-    [`<div class="doc-title">Investigation Requisitions</div>`, ...sections],
+    [`<div class="doc-title">Investigation Requisitions</div>`, infoBlock, ...reqSections, grandSection, sigBlock],
   );
   openIpdPrintWindow(`Investigation Requisitions — ${patient.admissionId}`, body);
 }
