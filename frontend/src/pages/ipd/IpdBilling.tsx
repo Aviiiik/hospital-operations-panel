@@ -105,13 +105,6 @@ function fmtDate(d: string | undefined) {
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-// Escape user free-text before dropping it into a print HTML string.
-function esc(s: string): string {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/\n/g, "<br>");
-}
-
 function gstAmt(base: number, gst?: number, gstType?: string): number {
   const g = Number(gst) || 0;
   if (g <= 0) return 0;
@@ -249,10 +242,6 @@ const BILL_PRINT_CSS = `
   .totals-box { display: block; margin-top: 22px; padding-top: 10px; border-top: 2px solid #111; }
   .totals-inner { min-width: 300px; margin-left: auto; border: 1px solid #cbd1d8;
     border-radius: 4px; padding: 8px 14px; }
-  /* Free-text bill comment, printed full-width under the totals box. */
-  .bill-comment { margin-top: 16px; border: 1px solid #cbd1d8; border-radius: 4px;
-    padding: 7px 12px; font-size: 10px; line-height: 1.45; color: #111; white-space: pre-wrap; }
-  .bill-comment .bill-comment-label { font-weight: bold; color: #555; }
 
   /* Double the breathing room between the totals box and the signature lines. */
   .signatures { margin-top: 80px; }
@@ -286,7 +275,7 @@ function totalsBlock(
   receiptSummary: ReceiptSummary | null,
   totalGst: number = 0, gstBreakdown: { label: string; amount: number }[] = [],
   discountSections: IpdDiscountSection[] = [],
-  billComment: string = "",
+  _billComment: string = "",
   hideBillDiscount: boolean = false,
   doctorGross: number = 0,
   doctorDiscount: number = 0,
@@ -299,11 +288,6 @@ function totalsBlock(
   return `
 <div class="totals-box">
   <div class="totals-inner">
-    <div class="totals-row"><span>Total Bed Charge</span><span class="bold">${fmt(totalBedCharge)}</span></div>
-    <div class="totals-row"><span>Nursing Home Charge</span><span class="bold">${fmt(servicesGross)}</span></div>
-    ${doctorGross > 0 ? `<div class="totals-row"><span>Doctor / Consultation Charge</span><span class="bold">${fmt(doctorGross)}</span></div>` : ""}
-    ${invTotal > 0 ? `<div class="totals-row"><span>Investigations</span><span class="bold">${fmt(invTotal)}</span></div>` : ""}
-    ${pharmTotal > 0 ? `<div class="totals-row"><span>Pharmacy</span><span class="bold">${fmt(pharmTotal)}</span></div>` : ""}
     <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal)}</span></div>
     ${discountSummaryHtml(discountSections)}
     <div class="totals-sep"></div>
@@ -321,7 +305,6 @@ function totalsBlock(
     <div class="totals-grand"><span>Payable By Patient</span><span>${fmt(netDue)}</span></div>
   </div>
 </div>
-${billComment.trim() ? `<div class="bill-comment"><span class="bill-comment-label">Comment:</span> ${esc(billComment.trim())}</div>` : ""}
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
@@ -1656,20 +1639,20 @@ export default function IpdBilling() {
                     )}
                   </div>
 
-                  {/* Bill-level comment — printed at the end of the bill */}
+                  {/* Bill-level comment — on-screen only, never printed on the bill */}
                   <div className="border rounded-md bg-gray-50 px-3 py-2 space-y-2 mt-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-medium text-gray-600">Bill Comment</span>
                       {billCommentSaved && (
                         <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                          saved · prints on bill
+                          saved · screen only, not printed
                         </span>
                       )}
                     </div>
                     <Textarea
                       value={billCommentInput}
                       onChange={e => setBillCommentInput(e.target.value)}
-                      placeholder="Add a comment to show at the end of the printed bill…"
+                      placeholder="Add an internal note (shown here only, not printed on the bill)…"
                       rows={2}
                       className="text-xs resize-y"
                     />

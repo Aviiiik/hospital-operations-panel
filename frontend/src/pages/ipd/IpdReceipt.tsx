@@ -120,7 +120,7 @@ const BLANK = {
 };
 
 // ── Single receipt print ──────────────────────────────────────────────────────
-function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number, logo: string) {
+function printReceipt(patient: any, receipt: ReceiptEntry, _totalReceived: number, logo: string) {
   const now = new Date();
   const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"})
     + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"});
@@ -160,15 +160,10 @@ function printReceipt(patient: any, receipt: ReceiptEntry, totalReceived: number
     </tr>
   </tbody>
 </table>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px">
-  <div>
-    ${receipt.tds ? `<div style="font-size:11px">TDS: ${fmt(receipt.tds)}</div>` : ""}
-    ${receipt.disallowed ? `<div style="font-size:11px">Disallowed: ${fmt(receipt.disallowed)}</div>` : ""}
-  </div>
-  <div>
-    <div style="font-size:11px;display:flex;justify-content:space-between"><span>This Receipt</span><span>${fmt(receipt.receiptAmount)}</span></div>
-    <div style="font-size:11px;display:flex;justify-content:space-between"><span>Total Received</span><span style="font-weight:bold">${fmt(totalReceived)}</span></div>
-  </div>
+<div style="margin-top:10px;margin-left:auto;width:260px;font-size:11px">
+  ${receipt.tds ? `<div style="display:flex;justify-content:space-between;padding:1px 0"><span>TDS</span><span>${fmt(receipt.tds)}</span></div>` : ""}
+  ${receipt.disallowed ? `<div style="display:flex;justify-content:space-between;padding:1px 0"><span>Disallowed</span><span>${fmt(receipt.disallowed)}</span></div>` : ""}
+  <div style="display:flex;justify-content:space-between;padding:1px 0"><span>This Receipt</span><span>${fmt(receipt.receiptAmount)}</span></div>
 </div>
 <div class="total-box">
   <div class="total-label">Amount Received</div>
@@ -230,14 +225,6 @@ function printAllReceipts(
   ].filter(Boolean).join(" ") || "—";
 
   const chargeRows = [
-    charges.bedTotal > 0
-      ? `<tr><td>Bed Charges</td><td class="right">${fmtAmt(charges.bedTotal)}</td></tr>` : "",
-    charges.servicesGross > 0
-      ? `<tr><td>Nursing Home Charges</td><td class="right">${fmtAmt(charges.servicesGross)}</td></tr>` : "",
-    charges.invTotal > 0
-      ? `<tr><td>Investigations</td><td class="right">${fmtAmt(charges.invTotal)}</td></tr>` : "",
-    charges.pharmTotal > 0
-      ? `<tr><td>Pharmacy</td><td class="right">${fmtAmt(charges.pharmTotal)}</td></tr>` : "",
     ...charges.discountSections.map(sec =>
       `<tr><td style="color:#c00">(-) ${sec.section} Discount</td><td class="right" style="color:#c00">(${fmtAmt(sec.total)})</td></tr>`),
     charges.billDiscAmt > 0
@@ -246,7 +233,6 @@ function printAllReceipts(
       ? `<tr><td>(+) GST</td><td class="right">${fmtAmt(charges.totalGst)}</td></tr>` : "",
     charges.totalGst > 0
       ? `<tr><td colspan="2" style="font-size:9px;color:#6b7280;border-top:none">${charges.gstBreakdown.map(x => `${x.label}: ${fmtAmt(x.amount)}`).join(" &middot; ")}</td></tr>` : "",
-    `<tr style="font-weight:bold;background:#f3f4f6"><td>Total Bill Amount</td><td class="right">${fmtAmt(grandTotal)}</td></tr>`,
   ].filter(Boolean).join("");
 
   const paymentRows = receipts.map(r => {
@@ -291,10 +277,10 @@ function printAllReceipts(
     ${paymentRows}
     ${totalTds > 0 ? `<tr><td style="color:#555">TDS Adjusted</td><td class="right" style="color:#555">${fmtAmt(totalTds)}</td></tr>` : ""}
     ${totalDis > 0 ? `<tr><td style="color:#555">Disallowed</td><td class="right" style="color:#555">${fmtAmt(totalDis)}</td></tr>` : ""}
-    <tr style="font-weight:bold;background:#fff7ed">
-      <td>${netDue > 0 ? "Balance Due" : "Overpaid / Advance"}</td>
-      <td class="right" style="color:${netDue > 0 ? "#b91c1c" : "#15803d"}">${fmtAmt(netDue)}</td>
-    </tr>
+    ${netDue > 0 ? `<tr style="font-weight:bold;background:#fff7ed">
+      <td>Balance Due</td>
+      <td class="right" style="color:#b91c1c">${fmtAmt(netDue)}</td>
+    </tr>` : ""}
   </tbody>
 </table>`;
 
