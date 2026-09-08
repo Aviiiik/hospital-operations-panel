@@ -288,7 +288,6 @@ function totalsBlock(
   return `
 <div class="totals-box">
   <div class="totals-inner">
-    <div class="totals-row"><span>Total Charge</span><span class="bold">${fmt(totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal)}</span></div>
     ${discountSummaryHtml(discountSections)}
     <div class="totals-sep"></div>
     <div class="totals-row"><span>Net Total</span><span class="bold">${fmt(preDisc)}</span></div>
