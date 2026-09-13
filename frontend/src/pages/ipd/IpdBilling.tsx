@@ -131,19 +131,20 @@ function discountSummaryHtml(discountSections: IpdDiscountSection[]): string {
 // patientHeaderHtml()/PATIENT_HEADER_CSS (in ipdPrint.ts) — this file only adds
 // the billing-specific totals box / signature styling on top of that.
 const BILL_PRINT_CSS = `
-  /* Totals rendered as a framed summary box, right-aligned — not a bare
-     floating column with dead space beside it. */
-  .totals-box { display: block; margin-top: 22px; padding-top: 10px; border-top: 2px solid #111; }
-  .totals-inner { min-width: 300px; margin-left: auto; border: 1px solid #cbd1d8;
-    border-radius: 4px; padding: 8px 14px; }
+  /* Plain totals — right-aligned lines under a single top rule, no boxed panel. */
+  .totals-box { display: block; margin-top: 18px; padding-top: 8px; border-top: 1px solid #111; }
+  .totals-inner { min-width: 300px; margin-left: auto; }
 
-  /* Double the breathing room between the totals box and the signature lines. */
-  .signatures { margin-top: 80px; }
+  /* Stamp room now comes from the reserved per-page footer strip (DOC_GRID_CSS
+     .foot-space) instead of a big gap here — that repeats on every page, not
+     just whichever page happens to end with the signature block. */
+  .signatures { margin-top: 30px; }
 
-  /* Service-group subheader row inside the itemised Services table. */
-  .group-row td { background: #eef2ff; color: #3730a3; font-weight: 700;
+  /* Service-group subheader row inside the itemised Services table — plain
+     bold caps, no shaded background, matching the rest of the plain bill. */
+  .group-row td { background: transparent; color: #111; font-weight: 700;
     text-transform: uppercase; letter-spacing: .04em; font-size: 10px;
-    padding: 5px 8px 4px; border-left: 0; border-right: 0; }
+    padding: 6px 6px 3px; border: none; }
 `;
 
 function printDoctorServiceSlip(patient: any, entries: BillingEntry[], logo: string) {

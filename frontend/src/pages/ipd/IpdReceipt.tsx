@@ -44,24 +44,29 @@ const PRINT_CSS = `
   .meta .lbl{color:#555;display:inline}
   .meta .val{font-weight:600;display:inline;margin-left:4px}
   table{width:100%;border-collapse:collapse;margin-bottom:10px}
-  th{background:#f3f4f6;padding:6px 10px;text-align:left;border:1px solid #aaa;font-size:11px}
+  th{background:transparent;padding:4px 8px;text-align:left;border:none;border-bottom:1px solid #111;font-size:11px;font-weight:700;text-transform:uppercase}
   th.right{text-align:right}
-  td{padding:5px 10px;border:1px solid #ccc;vertical-align:top;font-size:11px}
+  td{padding:4px 8px;border:none;vertical-align:top;font-size:11px}
   td.right{text-align:right;white-space:nowrap}
-  .words-box{border:1px solid #555;padding:8px 12px;font-size:11px;margin-bottom:14px;font-style:italic}
+  .words-box{font-size:11px;margin-bottom:14px;font-style:italic}
   .footer{display:flex;justify-content:space-between;font-size:11px;color:#555;margin-bottom:30px}
   .sig{display:flex;justify-content:space-between;margin-top:20px}
   .sig-line{border-top:1px solid #9ca3af;padding-top:4px;width:150px;text-align:center;font-size:11px;color:#4b5563}
   .page-footer{font-size:9px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:4px}
   @media print{
-    body{padding:0}
+    /* @page margin is 0 (see below) so left/right margin comes from body
+       padding instead — that still applies on every printed page. */
+    body{padding:0 20px}
     /* .print-patient-header (from patientHeaderHtml) rides in the doc-grid
        <thead> (repeats every page). The .page-footer is fixed to the paper
        bottom and painted into the strip the <tfoot> spacer reserves, so it
        repeats without overlapping content. */
-    .page-footer{position:fixed;left:20px;right:20px;bottom:0;background:#fff;
+    .page-footer{position:fixed;left:20px;right:20px;bottom:8px;background:#fff;
       height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
-    @page{margin:20px 20px}
+    /* margin:0 stops Chrome drawing its own header/footer (page URL/title) —
+       with no page margin left, it has nowhere to draw it. Our own top gap
+       comes from the repeating header's own top padding (PATIENT_HEADER_CSS). */
+    @page{size:A4;margin:0}
   }
   @media screen{
     .doc-grid > tfoot{display:none}
@@ -111,10 +116,10 @@ function printReceipt(patient: any, receipt: ReceiptEntry, _totalReceived: numbe
   if (receipt.chequeRefNo)   optCols.push({ th: "Ref",       td: receipt.chequeRefNo });
   if (receipt.bank)          optCols.push({ th: "Bank",      td: receipt.bank });
   const css = `${PRINT_CSS}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:12px}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #ccc;padding-bottom:10px;margin-bottom:12px}
   .il{font-size:10px;color:#6b7280}.iv{font-weight:600;font-size:12px}
-  .total-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
-  .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}`;
+  .total-box{border-top:1px solid #111;padding-top:8px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+  .total-label{font-size:13px;font-weight:bold;color:#111}.total-amt{font-size:18px;font-weight:bold;color:#111}`;
 
   const detailSection = `
 <div class="info-grid">
@@ -227,17 +232,17 @@ function printAllReceipts(
   </thead>
   <tbody>
     ${chargeRows}
-    <tr><td colspan="2" style="padding:2px;border:none;background:#fff"></td></tr>
-    <tr style="background:#f0fdf4;font-weight:bold">
+    <tr><td colspan="2" style="padding:2px;border:none"></td></tr>
+    <tr style="border-top:1px solid #111;font-weight:bold">
       <td>Received Amount</td>
       <td class="right">${fmtAmt(totalReceived)}</td>
     </tr>
     ${paymentRows}
     ${totalTds > 0 ? `<tr><td style="color:#555">TDS Adjusted</td><td class="right" style="color:#555">${fmtAmt(totalTds)}</td></tr>` : ""}
     ${totalDis > 0 ? `<tr><td style="color:#555">Disallowed</td><td class="right" style="color:#555">${fmtAmt(totalDis)}</td></tr>` : ""}
-    ${netDue > 0 ? `<tr style="font-weight:bold;background:#fff7ed">
+    ${netDue > 0 ? `<tr style="font-weight:bold;border-top:1px solid #111">
       <td>Balance Due</td>
-      <td class="right" style="color:#b91c1c">${fmtAmt(netDue)}</td>
+      <td class="right">${fmtAmt(netDue)}</td>
     </tr>` : ""}
   </tbody>
 </table>`;

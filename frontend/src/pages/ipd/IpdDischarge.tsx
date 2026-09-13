@@ -84,16 +84,21 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   .print-date{text-align:left;font-size:10px;color:#333;margin-top:10px}
   .page-footer{font-size:9px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:4px}
   @media print{
-    body{padding:0}
+    /* @page margin is 0 (see below) so left/right margin comes from body
+       padding instead — that still applies on every printed page. */
+    body{padding:0 18px}
     /* Header (hospital box + patient grid, from patientHeaderHtml) rides in
        the doc-grid <thead> (repeats every page, keeps content clear); the
        header→body gap is the <thead> cell padding-bottom (DOC_GRID_CSS).
        .page-footer is fixed to the paper bottom and painted into the strip
        the <tfoot> spacer reserves, so it repeats without ever overlapping
        content. */
-    .page-footer{position:fixed;left:18px;right:18px;bottom:0;background:#fff;
+    .page-footer{position:fixed;left:18px;right:18px;bottom:8px;background:#fff;
       height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
-    @page{margin:20px 18px}
+    /* margin:0 stops Chrome drawing its own header/footer (page URL/title) —
+       with no page margin left, it has nowhere to draw it. Our own top gap
+       comes from the repeating header's own top padding (PATIENT_HEADER_CSS). */
+    @page{size:A4;margin:0}
   }
   @media screen{
     .doc-grid > tfoot{display:none}

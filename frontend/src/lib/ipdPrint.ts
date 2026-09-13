@@ -22,7 +22,11 @@ export const DOC_GRID_CSS = `
   .doc-grid > thead > tr > td,
   .doc-grid > tbody > tr > td,
   .doc-grid > tfoot > tr > td { padding: 0; border: 0; vertical-align: top; }
-  .doc-grid .foot-space { height: 46px; }
+  /* Reserved blank strip at the bottom of EVERY printed page (this repeats via
+     <tfoot>, unlike a margin before the signature block which only lands on
+     whichever page happens to end the document) — tall enough to leave clear
+     room for a physical rubber stamp on every page, not just the last one. */
+  .doc-grid .foot-space { height: 120px; }
   .doc-section > h2:first-child, .doc-section > p:first-child { margin-top: 4px; }
   .doc-section table.chunk { table-layout: fixed; }
   .doc-section table.chunk th, .doc-section table.chunk td { overflow-wrap: anywhere; }
@@ -127,8 +131,10 @@ export const PATIENT_HEADER_CSS = `
   .php-hosp .h-reg  { font-size: 8px; font-weight: bold; margin-top: .5px; color: #111; }
   .php-title { text-align: center; font-size: 10px; font-weight: bold; letter-spacing: .08em;
     text-transform: uppercase; text-decoration: underline; margin: 8px 0 7px; color: #111; }
+  /* Plain — no box around the patient details, just a bottom rule under the
+     whole grid, like the reference paper bill. */
   .php-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px;
-    border: 1px solid #cbd1d8; padding: 5px 10px; }
+    border: none; border-bottom: 1px solid #111; padding: 3px 2px 6px; }
   .php-grid .row { display: flex; font-size: 9px; padding: .5px 0; line-height: 1.1; }
   .php-grid .row.wide { grid-column: 1 / -1; }
   .php-grid .k { width: 86px; flex-shrink: 0; color: #555; }
@@ -136,7 +142,11 @@ export const PATIENT_HEADER_CSS = `
   .php-grid .v { font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .php-grid .v.wrap { white-space: normal; }
   @media print {
-    .print-patient-header { height: 180px; overflow: hidden; padding: 0; margin: 0; }
+    /* @page margin is 0 (see PRINT_BASE_CSS) so there's no automatic top gap
+       on any page — this header repeats via <thead> on every page, so its own
+       top padding is what gives every page the same top margin the old @page
+       margin used to provide. Height is bumped by that same amount. */
+    .print-patient-header { height: 204px; overflow: hidden; padding: 24px 0 0; margin: 0; }
   }
   @media screen {
     .print-patient-header { margin-bottom: 14px; }
@@ -233,8 +243,7 @@ export function toWords(n: number): string {
 }
 
 export const WORDS_BOX_CSS = `
-  .words-box { border: 1px solid #9ca3af; border-radius: 3px; padding: 6px 10px;
-    font-size: 10px; font-style: italic; color: #333; margin-top: 8px; }
+  .words-box { font-size: 10px; font-style: italic; color: #333; margin-top: 8px; }
 `;
 
 export function amountInWordsHtml(amount: number, label = "Amount"): string {
@@ -249,27 +258,31 @@ export const PRINT_BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 12px; color: #333; }
   h1  { font-size: 22px; font-weight: bold; color: #b91c1c; letter-spacing: 0.03em; }
-  h2  { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
-        color: #555; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin: 14px 0 6px; }
+  h2  { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em;
+        color: #111; margin: 12px 0 4px; }
+  /* Plain ledger-style tables — thin horizontal rules only (header underline +
+     total-row overline), no per-cell grid lines and no shaded header band. */
   table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
-  th  { background: #f3f4f6; padding: 5px 8px; text-align: left; border: 1px solid #d1d5db; font-size: 10px; text-transform: uppercase; }
-  td  { padding: 4px 8px; border: 1px solid #e5e7eb; }
+  th  { background: transparent; padding: 3px 6px; text-align: left; border: none;
+        border-bottom: 1px solid #111; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  td  { padding: 3px 6px; border: none; }
   .right  { text-align: right; }
   .center { text-align: center; }
   .bold   { font-weight: bold; }
   .sub    { color: #6b7280; }
-  .total-row { background: #f9fafb; font-weight: bold; }
+  .total-row { background: transparent; font-weight: bold; border-top: 1px solid #111; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px;
-               border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 12px; }
+               border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 10px; }
   .info-label { font-size: 10px; color: #6b7280; }
   .info-val   { font-weight: 600; font-size: 12px; }
-  .totals-box { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .totals-box { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 6px;
+                border-top: 1px solid #111; }
   .totals-inner { min-width: 260px; }
-  .totals-row   { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
-  .totals-sep   { border-top: 1px solid #d1d5db; margin: 4px 0; }
-  .totals-grand { display: flex; justify-content: space-between; padding: 6px 0 0;
-                  border-top: 2px solid #111; font-size: 14px; font-weight: bold; margin-top: 4px; }
-  .signatures   { display: flex; justify-content: space-between; margin-top: 40px; }
+  .totals-row   { display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; }
+  .totals-sep   { border-top: 1px solid #ccc; margin: 4px 0; }
+  .totals-grand { display: flex; justify-content: space-between; padding: 5px 0 0;
+                  border-top: 1px solid #111; font-size: 13px; font-weight: bold; margin-top: 3px; }
+  .signatures   { display: flex; justify-content: space-between; margin-top: 30px; }
   .sig-line     { border-top: 1px solid #9ca3af; padding-top: 4px; width: 150px; text-align: center; font-size: 11px; color: #4b5563; }
 
   /* Doctor / consultation services — its own itemised table, kept visually separate from the main services table */
@@ -286,16 +299,26 @@ export const PRINT_BASE_CSS = `
 
   body { padding: 24px; }
   @media print {
-    body { padding: 0; }
+    /* @page margin is zero on purpose (see below) — left/right margin now
+       comes from body padding instead, which still applies on every printed
+       page since it's a static horizontal inset, not a per-page thing. */
+    body { padding: 0 24px; }
     /* .print-header rides in <thead> (repeats natively, keeps content clear).
        .print-footer is fixed to the paper bottom and painted into the strip the
        <tfoot> spacer reserves, so it repeats on every page with no overlap.
        The header→body gap is the <thead> cell's padding-bottom (DOC_GRID_CSS). */
     .print-header { margin: 0 0 8px; }
-    .print-footer { position: fixed; left: 24px; right: 24px; bottom: 0; height: 34px;
+    .print-footer { position: fixed; left: 24px; right: 24px; bottom: 8px; height: 34px;
       margin: 0; padding: 0 0 8px; background: #fff;
       display: flex; align-items: flex-end; justify-content: center; }
-    @page { margin: 28px 24px; }
+    /* @page margin: 0 is the trick that stops Chrome drawing its OWN header/
+       footer (the page URL/title/date it adds when "Headers and footers" is
+       checked in the print dialog) — with zero page margin there's no room
+       left for it to draw into. Our own top/bottom spacing is provided
+       instead by the repeating header's own padding (see PATIENT_HEADER_CSS)
+       and the tfoot foot-space + fixed .print-footer, both of which already
+       repeat per page regardless of @page margin. */
+    @page { size: A4; margin: 0; }
   }
   @media screen {
     .print-header { margin-bottom: 16px; }
