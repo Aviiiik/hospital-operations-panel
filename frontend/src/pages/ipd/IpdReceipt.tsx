@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { RECEIPT_MODES, BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
-import { printViaHiddenIframe, wrapPrintDoc, hospitalHeaderHtml, DOC_GRID_CSS, HOSPITAL_HEADER_CSS } from "@/lib/ipdPrint";
+import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS, patientHeaderHtml, PATIENT_HEADER_CSS, toWords } from "@/lib/ipdPrint";
 
 function todayStr() { return todayIST(); }
 function fmt(n: number) {
@@ -34,29 +34,9 @@ function gstAmt(base: number, gst?: number, gstType?: string): number {
   return gstType === "flat" ? g : (base * g) / 100;
 }
 
-// ── Amount in words ───────────────────────────────────────────────────────────
-function toWords(n: number): string {
-  const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten",
-    "Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
-  const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
-  function below100(x: number) { return x < 20 ? ones[x] : tens[Math.floor(x/10)] + (x%10 ? " "+ones[x%10] : ""); }
-  function below1000(x: number) { return x<100 ? below100(x) : ones[Math.floor(x/100)]+" Hundred"+(x%100?" "+below100(x%100):""); }
-  if (!n || n <= 0) return "Zero";
-  const whole = Math.round(n);
-  let r = "", rem = whole;
-  const cr = Math.floor(rem/10000000); rem %= 10000000;
-  const lk = Math.floor(rem/100000);  rem %= 100000;
-  const th = Math.floor(rem/1000);    rem %= 1000;
-  if (cr) r += below1000(cr)+" Crore ";
-  if (lk) r += below100(lk)+" Lakh ";
-  if (th) r += below1000(th)+" Thousand ";
-  if (rem) r += below1000(rem);
-  return r.trim();
-}
-
 const PRINT_CSS = `
   ${DOC_GRID_CSS}
-  ${HOSPITAL_HEADER_CSS}
+  ${PATIENT_HEADER_CSS}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:12px;color:#333;padding:24px}
   .title{text-align:center;font-size:16px;font-weight:bold;text-decoration:underline;margin-bottom:14px;letter-spacing:0.05em}
@@ -64,24 +44,29 @@ const PRINT_CSS = `
   .meta .lbl{color:#555;display:inline}
   .meta .val{font-weight:600;display:inline;margin-left:4px}
   table{width:100%;border-collapse:collapse;margin-bottom:10px}
-  th{background:#f3f4f6;padding:6px 10px;text-align:left;border:1px solid #aaa;font-size:11px}
+  th{background:transparent;padding:4px 8px;text-align:left;border:none;border-bottom:1px solid #111;font-size:11px;font-weight:700;text-transform:uppercase}
   th.right{text-align:right}
-  td{padding:5px 10px;border:1px solid #ccc;vertical-align:top;font-size:11px}
+  td{padding:4px 8px;border:none;vertical-align:top;font-size:11px}
   td.right{text-align:right;white-space:nowrap}
-  .words-box{border:1px solid #555;padding:8px 12px;font-size:11px;margin-bottom:14px;font-style:italic}
+  .words-box{font-size:11px;margin-bottom:14px;font-style:italic}
   .footer{display:flex;justify-content:space-between;font-size:11px;color:#555;margin-bottom:30px}
   .sig{display:flex;justify-content:space-between;margin-top:20px}
   .sig-line{border-top:1px solid #9ca3af;padding-top:4px;width:150px;text-align:center;font-size:11px;color:#4b5563}
   .page-footer{font-size:9px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:4px}
   @media print{
-    body{padding:0}
-    /* .print-header rides in the doc-grid <thead> (repeats every page). The
-       .page-footer is fixed to the paper bottom and painted into the strip the
-       <tfoot> spacer reserves, so it repeats without overlapping content. */
-    .print-header{margin-bottom:8px}
-    .page-footer{position:fixed;left:20px;right:20px;bottom:0;background:#fff;
+    /* @page margin is 0 (see below) so left/right margin comes from body
+       padding instead — that still applies on every printed page. */
+    body{padding:0 20px}
+    /* .print-patient-header (from patientHeaderHtml) rides in the doc-grid
+       <thead> (repeats every page). The .page-footer is fixed to the paper
+       bottom and painted into the strip the <tfoot> spacer reserves, so it
+       repeats without overlapping content. */
+    .page-footer{position:fixed;left:20px;right:20px;bottom:8px;background:#fff;
       height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
-    @page{margin:20px 20px}
+    /* margin:0 stops Chrome drawing its own header/footer (page URL/title) —
+       with no page margin left, it has nowhere to draw it. Our own top gap
+       comes from the repeating header's own top padding (PATIENT_HEADER_CSS). */
+    @page{size:A4;margin:0}
   }
   @media screen{
     .doc-grid > tfoot{display:none}
@@ -131,21 +116,15 @@ function printReceipt(patient: any, receipt: ReceiptEntry, _totalReceived: numbe
   if (receipt.chequeRefNo)   optCols.push({ th: "Ref",       td: receipt.chequeRefNo });
   if (receipt.bank)          optCols.push({ th: "Bank",      td: receipt.bank });
   const css = `${PRINT_CSS}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:12px}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 32px;border-bottom:1px solid #ccc;padding-bottom:10px;margin-bottom:12px}
   .il{font-size:10px;color:#6b7280}.iv{font-weight:600;font-size:12px}
-  .total-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
-  .total-label{font-size:13px;font-weight:bold;color:#1d4ed8}.total-amt{font-size:22px;font-weight:bold;color:#1e40af}`;
+  .total-box{border-top:1px solid #111;padding-top:8px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+  .total-label{font-size:13px;font-weight:bold;color:#111}.total-amt{font-size:18px;font-weight:bold;color:#111}`;
 
   const detailSection = `
 <div class="info-grid">
   <div><div class="il">Receipt No</div><div class="iv" style="font-family:monospace">${receipt.receiptNo}</div></div>
   <div><div class="il">Receipt Date</div><div class="iv">${fmtDate(receipt.receiptDate)}</div></div>
-  <div><div class="il">Patient Name</div><div class="iv">${patient.title} ${patient.name}</div></div>
-  <div><div class="il">Admission ID</div><div class="iv" style="font-family:monospace">${patient.admissionId}</div></div>
-  <div><div class="il">Adm Date</div><div class="iv">${fmtDate(patient.admissionDate)}</div></div>
-  <div><div class="il">Address</div><div class="iv">${patient.address || "—"}</div></div>
-  <div><div class="il">Sex / Age</div><div class="iv">${patient.gender} / ${patient.ageYears}Y</div></div>
-  <div><div class="il">Attended By</div><div class="iv">${patient.doctors?.map((d: any) => d.doctorName).join(", ") || "—"}</div></div>
 </div>
 <table>
   <thead><tr><th>Receipt No</th><th>Date</th><th>Mode</th>${optCols.map(c => `<th>${c.th}</th>`).join("")}<th>Remarks</th><th class="right">Amount</th></tr></thead>
@@ -178,8 +157,8 @@ function printReceipt(patient: any, receipt: ReceiptEntry, _totalReceived: numbe
   <div style="text-align:right"><div style="font-size:11px;margin-bottom:20px">E &amp; O.E.</div><div class="sig-line" style="margin-left:auto">Authorised Signatory</div></div>
 </div>`;
 
-  const body = wrapPrintDoc(hospitalHeaderHtml(logo),
-    [`<div class="doc-title">Receipt</div>`, detailSection, signSection],
+  const body = wrapPrintDoc(patientHeaderHtml(logo, "Money Receipt", patient),
+    [detailSection, signSection],
     `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated receipt</div>`);
 
   printViaHiddenIframe(`Receipt ${receipt.receiptNo}`, css, body);
@@ -215,14 +194,6 @@ function printAllReceipts(
   const now = new Date();
   const printDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"})
     + " " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"});
-  const admDt     = patient.admissionDate ? fmtDateShort(patient.admissionDate) : "—";
-  const invoiceDt = now.toLocaleDateString("en-IN",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Asia/Kolkata"});
-  const invoiceTm = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Kolkata"});
-  const ageStr = [
-    patient.ageYears  ? patient.ageYears  + " Year"  : "",
-    patient.ageMonths ? patient.ageMonths + " Month" : "",
-    patient.ageDays   ? patient.ageDays   + " Day"   : "",
-  ].filter(Boolean).join(" ") || "—";
 
   const chargeRows = [
     ...charges.discountSections.map(sec =>
@@ -249,17 +220,9 @@ function printAllReceipts(
   const css = PRINT_CSS;
 
   const metaSection = `
-<div class="title">MONEY RECEIPT</div>
 <div class="meta">
   <div><span class="lbl">Voucher No.</span><span class="val">${receipts[0].receiptNo}</span></div>
-  <div style="text-align:right"><span class="lbl">Invoice No. :</span><span class="val">${patient.admissionId}</span></div>
-  <div><span class="lbl">Voucher Date</span><span class="val">${fmtDateShort(receipts[receipts.length-1].receiptDate)}</span></div>
-  <div style="text-align:right"><span class="lbl">Invoice Dt/Tm :</span><span class="val">${invoiceDt} &nbsp; ${invoiceTm}</span></div>
-  <div><span class="lbl">Received From</span><span class="val">${patient.title} ${patient.name} ( ${patient.admissionId} of ${admDt} )</span></div>
-  <div style="text-align:right">
-    <div><span class="lbl">Patient Id :</span><span class="val">${patient.admissionId}</span></div>
-    <div style="margin-top:3px"><span class="lbl">Gender/Age :</span><span class="val">${patient.gender || "—"} / ${ageStr}</span></div>
-  </div>
+  <div style="text-align:right"><span class="lbl">Voucher Date</span><span class="val">${fmtDateShort(receipts[receipts.length-1].receiptDate)}</span></div>
 </div>`;
 
   const tableSection = `
@@ -269,17 +232,17 @@ function printAllReceipts(
   </thead>
   <tbody>
     ${chargeRows}
-    <tr><td colspan="2" style="padding:2px;border:none;background:#fff"></td></tr>
-    <tr style="background:#f0fdf4;font-weight:bold">
+    <tr><td colspan="2" style="padding:2px;border:none"></td></tr>
+    <tr style="border-top:1px solid #111;font-weight:bold">
       <td>Received Amount</td>
       <td class="right">${fmtAmt(totalReceived)}</td>
     </tr>
     ${paymentRows}
     ${totalTds > 0 ? `<tr><td style="color:#555">TDS Adjusted</td><td class="right" style="color:#555">${fmtAmt(totalTds)}</td></tr>` : ""}
     ${totalDis > 0 ? `<tr><td style="color:#555">Disallowed</td><td class="right" style="color:#555">${fmtAmt(totalDis)}</td></tr>` : ""}
-    ${netDue > 0 ? `<tr style="font-weight:bold;background:#fff7ed">
+    ${netDue > 0 ? `<tr style="font-weight:bold;border-top:1px solid #111">
       <td>Balance Due</td>
-      <td class="right" style="color:#b91c1c">${fmtAmt(netDue)}</td>
+      <td class="right">${fmtAmt(netDue)}</td>
     </tr>` : ""}
   </tbody>
 </table>`;
@@ -295,7 +258,7 @@ function printAllReceipts(
   <div><div class="sig-line">Signature</div></div>
 </div>`;
 
-  const body = wrapPrintDoc(hospitalHeaderHtml(logo), [metaSection, tableSection, signSection],
+  const body = wrapPrintDoc(patientHeaderHtml(logo, "Money Receipt", patient), [metaSection, tableSection, signSection],
     `<div class="page-footer">Arogya Maternity &amp; Nursing Home — Computer generated document</div>`);
 
   printViaHiddenIframe(`Money Receipt — ${patient.admissionId}`, css, body);

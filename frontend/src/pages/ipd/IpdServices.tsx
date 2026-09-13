@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Pencil, Trash2, Plus, X, RefreshCw } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Plus, X, RefreshCw, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, {
@@ -15,6 +15,8 @@ import ipdService, {
   buildServiceGroups, SERVICE_GROUP_META, computeBillingDays, combineISTDateTime, todayIST,
 } from "@/services/ipdService";
 import opdService from "@/services/opdService";
+import { openIpdPrintWindow, patientHeaderHtml, wrapPrintDoc, chunkTableSections, amountInWordsHtml } from "@/lib/ipdPrint";
+import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,57 @@ const BLANK: {
   fromDate: "", fromTime: "",
   toDate: "", toTime: "",
 };
+
+// ─── Print the full services list for the admission ───────────────────────────
+function printServicesList(patient: any, entries: BillingEntry[], logo: string) {
+  if (!entries.length) { toast.error("No services to print"); return; }
+
+  const sorted        = [...entries].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const grossTotal    = entries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
+  const totalDiscount = entries.reduce((s, e) => s + e.discount, 0);
+  const netPayable    = entries.reduce((s, e) => s + e.totalCharge, 0);
+
+  const svcHead = `<tr><th class="center">#</th><th>Date</th><th>Group</th><th>Service</th><th class="center">Qty</th><th class="right">Rate</th><th>Unit</th><th class="right">Amount</th><th class="right">Discount</th><th class="right">Net Amt</th><th>Doctor / Remarks</th></tr>`;
+  const svcCols = `<colgroup><col style="width:3%"><col style="width:8%"><col style="width:12%"><col style="width:19%"><col style="width:5%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:11%"></colgroup>`;
+  const rowArr = sorted.map((e, i) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td>${fmtDateShort(e.date)}</td>
+      <td>${e.serviceGroup}</td>
+      <td>${e.serviceName}${e.isAutoAdded ? ` <span style="color:#6b7280;font-size:9px">(AUTO)</span>` : ""}</td>
+      <td class="center">${e.quantity}</td>
+      <td class="right">${fmtRs(e.unitCharge)}</td>
+      <td>${e.unit || "—"}</td>
+      <td class="right">${fmtRs(e.unitCharge * e.quantity)}</td>
+      <td class="right">${e.discount > 0 ? (e.discountType === "percent" ? `${e.discount}%` : fmtRs(e.discount)) : "—"}</td>
+      <td class="right bold">${fmtRs(e.totalCharge)}</td>
+      <td>${[e.doctorName, e.notes].filter(Boolean).join(" · ") || "—"}</td>
+    </tr>`);
+  const svcFoot = `<tr class="total-row"><td colspan="7">Total</td><td class="right">${fmtRs(grossTotal)}</td><td class="right" style="color:#ef4444">${totalDiscount > 0 ? fmtRs(totalDiscount) : "—"}</td><td class="right">${fmtRs(netPayable)}</td><td></td></tr>`;
+
+  const infoBlock = `
+<div class="info-grid">
+  <div><div class="info-label">Total Services</div><div class="info-val">${entries.length}</div></div>
+  <div><div class="info-label">Printed</div><div class="info-val">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div></div>
+</div>`;
+
+  const sigBlock = `
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>`;
+
+  const body = wrapPrintDoc(
+    patientHeaderHtml(logo, "Services List", patient),
+    [
+      infoBlock,
+      ...chunkTableSections("Services", svcCols, svcHead, rowArr, svcFoot),
+      amountInWordsHtml(netPayable),
+      sigBlock,
+    ],
+  );
+  openIpdPrintWindow(`Services — ${patient.admissionId}`, body);
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -330,9 +383,14 @@ export default function IpdServices() {
           </button>
           <span className="font-bold text-base text-gray-800">Services</span>
         </div>
-        <Button size="sm" variant="outline" onClick={loadCatalogue} className="gap-1 h-8 text-xs">
-          <RefreshCw className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => printServicesList(patient, entries, logoUrl)} className="gap-1 h-8 text-xs">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Button>
+          <Button size="sm" variant="outline" onClick={loadCatalogue} className="gap-1 h-8 text-xs">
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
       {/* Patient header */}

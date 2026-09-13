@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ArrowLeft, Printer, Receipt, Stethoscope, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import ipdService, { BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr, buildDiscountSections, type IpdDiscountSection } from "@/services/ipdService";
-import { openIpdPrintWindow, printHeaderHtml, doctorServiceBoxHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
+import ipdService, { BED_CHARGES, computeBillingDays, combineISTDateTime, isBedChargeExempt, todayIST, nowISTTime, toISTDateStr, buildDiscountSections, formatAdmissionNumber, formatInvoiceNumber, type IpdDiscountSection } from "@/services/ipdService";
+import { openIpdPrintWindow, patientHeaderHtml, doctorServiceBoxHtml, wrapPrintDoc, chunkTableSections, amountInWordsHtml } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 interface BillingEntry {
@@ -126,145 +126,31 @@ function discountSummaryHtml(discountSections: IpdDiscountSection[]): string {
   ).join("");
 }
 
-function patientInfoBlock(patient: any) {
-  const doctors = patient.doctors?.length
-    ? patient.doctors.map((d: any) => d.doctorName).join(", ")
-    : "—";
-  return `
-<div class="info-grid">
-  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
-  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
-  <div><div class="info-label">Age / Sex</div><div class="info-val">${patient.ageYears ? patient.ageYears + "Y " : ""}${patient.ageMonths ? patient.ageMonths + "M " : ""}${patient.ageDays ? patient.ageDays + "D" : ""} / ${patient.gender || "—"}</div></div>
-  <div><div class="info-label">Phone</div><div class="info-val">${patient.phone || "—"}</div></div>
-  <div><div class="info-label">Admitted</div><div class="info-val">${fmtDate(patient.admissionDate)} ${patient.admissionTime || ""}</div></div>
-  <div><div class="info-label">Discharged</div><div class="info-val">${fmtDate(patient.dischargeDate)} ${patient.dischargeTime || ""}</div></div>
-  ${patient.address ? `<div style="grid-column:1/-1"><div class="info-label">Address</div><div class="info-val">${patient.address}</div></div>` : ""}
-  <div style="grid-column:1/-1"><div class="info-label">Under Doctor</div><div class="info-val">${doctors}</div></div>
-  ${patient.patientCategory ? `<div><div class="info-label">Patient Category</div><div class="info-val">${patient.patientCategory}</div></div>` : ""}
-  ${patient.insuranceCo ? `<div><div class="info-label">Insurance Company</div><div class="info-val">${patient.insuranceCo}</div></div>` : ""}
-  ${patient.tpa ? `<div><div class="info-label">TPA</div><div class="info-val">${patient.tpa}</div></div>` : ""}
-</div>`;
-}
-
-// ─── Full billing print header ──────────────────────────────────────────────
-// Returns { header, intro }:
-//  - `header` = just the hospital identity box, rendered inside .print-header
-//    which goes in the doc-grid <thead> and repeats on EVERY printed page. It's
-//    short, fixed-height and flex-only (see BILL_PRINT_CSS @media print) so
-//    Chrome reliably repeats it — the tall auto-height title+grid did not.
-//  - `intro` = the bill title + two-column patient grid, rendered as the first
-//    body section, so it only appears on page 1.
-function billHeaderHtml(logo: string, billTitle: string, patient: any) {
-  const doctors = patient.doctors?.length
-    ? patient.doctors.map((d: any) => d.doctorName).join(", ")
-    : "—";
-  const ageStr = [
-    patient.ageYears  ? patient.ageYears  + "Y" : "",
-    patient.ageMonths ? patient.ageMonths + "M" : "",
-    patient.ageDays   ? patient.ageDays   + "D" : "",
-  ].filter(Boolean).join(" ") || "—";
-  const invoiceDate = new Date().toLocaleDateString("en-IN",
-    { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
-  const corporate = patient.tpa || patient.insuranceCo || patient.patientCategory || "—";
-  const bedInfo = patient.bedNo
-    ? `${patient.bedNo}${patient.bedCategory ? ` (${patient.bedCategory})` : ""}`
-    : "—";
-  const row = (k: string, v: string, wrap = false) =>
-    `<div class="row"><span class="k">${k}</span><span class="v${wrap ? " wrap" : ""}">${v}</span></div>`;
-  const header = `
-<div class="print-header">
-  <div class="bill-hosp">
-    <div class="logo-cell"><img src="${logo}" alt="Logo"/></div>
-    <div class="hosp-cell">
-      <div class="h-name">AROGYA MATERNITY &amp; NURSING HOME</div>
-      <div class="h-line">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
-      <div class="h-line">(Licence Under W.B. Clinical Establishment Act)</div>
-      <div class="h-reg">Regd. No: 34257492</div>
-      <div class="h-line">71, Tollygunge Circular Road, Kolkata-700053 (New Alipore, Sital Sadan Compound)</div>
-      <div class="h-line">Phone: (033) 2400-0681 / 0684 &nbsp;|&nbsp; Fax: (033) 2400-1180</div>
-    </div>
-  </div>
-</div>`;
-
-  const intro = `
-<div class="bill-title">${billTitle} Details</div>
-<div class="bill-pat">
-  <div class="col">
-    ${row("Patient Id", patient.ipdRegistrationNo || patient.admissionId)}
-    ${row("Admission No", patient.admissionId)}
-    ${row("Admitting Doctor", doctors)}
-    ${row("Patient Name", `${patient.title || ""} ${patient.name || ""}`.trim() || "—")}
-    ${row("Sex / Age", `${patient.gender || "—"} / ${ageStr}`)}
-    ${row("Address", patient.address || "—", true)}
-    ${row("Corporate", corporate)}
-  </div>
-  <div class="col">
-    ${row("Invoice No", patient.admissionId)}
-    ${row("Invoice Date", invoiceDate)}
-    ${row("Bed No", bedInfo)}
-    ${row("Admission Dt", `${fmtDate(patient.admissionDate)} ${patient.admissionTime || ""}`.trim())}
-    ${row("Discharge Dt", patient.dischargeDate
-      ? `${fmtDate(patient.dischargeDate)} ${patient.dischargeTime || ""}`.trim()
-      : "—")}
-  </div>
-</div>`;
-
-  return { header, intro };
-}
-
 // Extra CSS appended after PRINT_BASE_CSS for the detailed / summary bills.
+// The repeating hospital box + patient grid now comes entirely from the shared
+// patientHeaderHtml()/PATIENT_HEADER_CSS (in ipdPrint.ts) — this file only adds
+// the billing-specific totals box / signature styling on top of that.
 const BILL_PRINT_CSS = `
-  /* Full billing header (hospital box + title + patient grid) overrides the
-     compact shared .print-header. It renders in normal flow — see the @media
-     print block below for why it is NOT position:fixed here. */
-  .print-header { display: block; border-bottom: none; padding-bottom: 0; }
-  .bill-hosp { display: flex; align-items: stretch; border: 1.5px solid #111; }
-  .bill-hosp .logo-cell { display: flex; align-items: center; justify-content: center;
-    padding: 10px 18px; border-right: 1.5px solid #111; }
-  .bill-hosp .logo-cell img { width: 108px; height: 108px; object-fit: contain; }
-  .bill-hosp .hosp-cell { flex: 1; text-align: center; padding: 10px 12px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .bill-hosp .h-name { font-size: 16px; font-weight: bold; letter-spacing: .02em; color: #111; }
-  .bill-hosp .h-line { font-size: 9px; color: #333; margin-top: 1px; }
-  .bill-hosp .h-reg  { font-size: 9px; font-weight: bold; margin-top: 2px; color: #111; }
-  .bill-title { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: .1em;
-    text-transform: uppercase; text-decoration: underline; margin: 4px 0 12px; color: #111; }
-  .bill-pat { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px;
-    border: 1px solid #cbd1d8; padding: 9px 12px; }
-  .bill-pat .row { display: flex; font-size: 10px; padding: 1.5px 0; line-height: 1.35; }
-  .bill-pat .k { width: 108px; flex-shrink: 0; color: #555; }
-  .bill-pat .k::after { content: ":"; float: right; padding-right: 6px; }
-  .bill-pat .v { font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bill-pat .v.wrap { white-space: normal; }
+  /* Plain totals — right-aligned lines under a single top rule, no boxed panel. */
+  .totals-box { display: block; margin-top: 18px; padding-top: 8px; border-top: 1px solid #111; }
+  .totals-inner { min-width: 300px; margin-left: auto; }
 
-  /* Totals rendered as a framed summary box, right-aligned — not a bare
-     floating column with dead space beside it. */
-  .totals-box { display: block; margin-top: 22px; padding-top: 10px; border-top: 2px solid #111; }
-  .totals-inner { min-width: 300px; margin-left: auto; border: 1px solid #cbd1d8;
-    border-radius: 4px; padding: 8px 14px; }
+  /* Stamp room now comes from the reserved per-page footer strip (DOC_GRID_CSS
+     .foot-space) instead of a big gap here — that repeats on every page, not
+     just whichever page happens to end with the signature block. */
+  .signatures { margin-top: 30px; }
 
-  /* Double the breathing room between the totals box and the signature lines. */
-  .signatures { margin-top: 80px; }
-
-  @media print {
-    /* Only the hospital box lives in .print-header now, and it sits in the
-       doc-grid <thead>. Give it an explicit height + overflow:hidden — same
-       recipe as IpdDischarge's .page-header — so Chrome can resolve its size
-       and repeat it on every page (an auto-height header did not repeat once
-       content overflowed). The header→body gap is the <thead> cell
-       padding-bottom (DOC_GRID_CSS). */
-    .print-header { position: static; height: 138px; overflow: hidden;
-      padding: 0; margin: 0 0 8px; }
-  }
-  @media screen {
-    .print-header { margin-bottom: 16px; }
-  }
+  /* Service-group subheader row inside the itemised Services table — plain
+     bold caps, no shaded background, matching the rest of the plain bill. */
+  .group-row td { background: transparent; color: #111; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; font-size: 10px;
+    padding: 6px 6px 3px; border: none; }
 `;
 
 function printDoctorServiceSlip(patient: any, entries: BillingEntry[], logo: string) {
   const body = wrapPrintDoc(
-    printHeaderHtml(logo, "Doctor / Consultation Services"),
-    [patientInfoBlock(patient), doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)],
+    patientHeaderHtml(logo, "Doctor / Consultation Services", patient),
+    [doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)],
   );
   openIpdPrintWindow(`Doctor Services — ${patient.admissionId}`, body);
 }
@@ -279,12 +165,18 @@ function totalsBlock(
   hideBillDiscount: boolean = false,
   doctorGross: number = 0,
   doctorDiscount: number = 0,
+  patient: any = null,
 ) {
   const totalPaid  = receiptSummary?.totalReceived ?? 0;
   const totalTds   = receiptSummary?.totalTds ?? 0;
   const totalDis   = receiptSummary?.totalDisallowed ?? 0;
   const preDisc    = totalBedCharge + servicesGross + doctorGross + invTotal + pharmTotal - servicesDiscount - doctorDiscount;
   const netDue     = Math.max(0, grandTotal - totalPaid - totalTds - totalDis);
+  // Cashless/TPA/Insurance/Mediclaim admissions settle the due amount with the
+  // company, not the patient — disclose that on the bill when a company is on file.
+  const companyName = patient?.tpa || patient?.insuranceCo || "";
+  const isCorporateCategory = ["TPA", "INSURANCE", "MEDICLAIM"].includes(
+    (patient?.patientCategory || "").trim().toUpperCase());
   return `
 <div class="totals-box">
   <div class="totals-inner">
@@ -302,8 +194,12 @@ function totalsBlock(
     ${totalTds > 0 ? `<div class="totals-row"><span>TDS</span><span>${fmt(totalTds)}</span></div>` : ""}
     ${totalDis > 0 ? `<div class="totals-row"><span>Disallowed</span><span>${fmt(totalDis)}</span></div>` : ""}
     <div class="totals-grand"><span>Payable By Patient</span><span>${fmt(netDue)}</span></div>
+    ${amountInWordsHtml(netDue, "Payable By Patient")}
   </div>
 </div>
+${isCorporateCategory && companyName
+  ? `<div style="font-size:11px;font-weight:600;margin-top:8px">Due Amount Rs. 0.00 payable by ${companyName}</div>`
+  : ""}
 <div class="signatures">
   <div><div class="sig-line">Patient / Guardian</div></div>
   <div><div class="sig-line">Authorised Signatory</div></div>
@@ -406,22 +302,35 @@ function buildDetailedBillHtml(
     </tr>`;
   }).join("");
 
-  const svcRowArr = regularEntries.map((e, i) => {
-    const g = gstAmt(e.totalCharge, e.gst, e.gstType);
-    const disc = e.unitCharge * e.quantity - e.totalCharge;
-    return `
+  // Group entries by service group — group name rendered as a subheader row
+  // spanning the table, items listed underneath (preserves first-seen group order).
+  const svcGroupOrder: string[] = [];
+  const svcByGroup: Record<string, BillingEntry[]> = {};
+  regularEntries.forEach(e => {
+    if (!svcByGroup[e.serviceGroup]) { svcByGroup[e.serviceGroup] = []; svcGroupOrder.push(e.serviceGroup); }
+    svcByGroup[e.serviceGroup].push(e);
+  });
+  const svcColCount = svcHasDisc ? 8 : 7;
+  let svcRowIdx = 0;
+  const svcRowArr = svcGroupOrder.flatMap(grp => [
+    `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
+    ...svcByGroup[grp].map(e => {
+      svcRowIdx++;
+      const g = gstAmt(e.totalCharge, e.gst, e.gstType);
+      const disc = e.unitCharge * e.quantity - e.totalCharge;
+      return `
     <tr>
-      <td>${i + 1}</td>
+      <td>${svcRowIdx}</td>
       <td>${fmtDate(e.date)}</td>
       <td>${e.serviceName}</td>
-      <td class="sub">${e.serviceGroup}</td>
       <td class="center">${e.quantity}</td>
       <td class="right">${fmt(e.unitCharge)}</td>
       ${svcHasDisc ? `<td class="right">${disc > 0 ? `<span style="color:#ef4444">${fmt(disc)}</span>` : "—"}</td>` : ""}
       <td class="right bold">${fmt(e.totalCharge)}</td>
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
-  });
+    }),
+  ]);
 
   const doctorBox = doctorServiceBoxHtml(doctorEntries, patient.referredBy, fmt, fmtDate);
 
@@ -476,11 +385,11 @@ function buildDetailedBillHtml(
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
-  const svcHead = `<tr><th>#</th><th>Date</th><th>Service</th><th>Group</th><th class="center">Qty</th><th class="right">Unit Rate</th>${svcHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Amount</th><th class="right">GST</th></tr>`;
+  const svcHead = `<tr><th>#</th><th>Date</th><th>Service</th><th class="center">Qty</th><th class="right">Unit Rate</th>${svcHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Amount</th><th class="right">GST</th></tr>`;
   const svcCols = svcHasDisc
-    ? `<colgroup><col style="width:4%"><col style="width:10%"><col style="width:22%"><col style="width:15%"><col style="width:6%"><col style="width:10%"><col style="width:11%"><col style="width:14%"><col style="width:8%"></colgroup>`
-    : `<colgroup><col style="width:4%"><col style="width:11%"><col style="width:29%"><col style="width:18%"><col style="width:7%"><col style="width:12%"><col style="width:11%"><col style="width:8%"></colgroup>`;
-  const svcFoot = `<tr class="total-row"><td colspan="6">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
+    ? `<colgroup><col style="width:4%"><col style="width:11%"><col style="width:32%"><col style="width:7%"><col style="width:11%"><col style="width:12%"><col style="width:15%"><col style="width:8%"></colgroup>`
+    : `<colgroup><col style="width:4%"><col style="width:12%"><col style="width:36%"><col style="width:8%"><col style="width:13%"><col style="width:16%"><col style="width:11%"></colgroup>`;
+  const svcFoot = `<tr class="total-row"><td colspan="5">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
 
   const invHead = `<tr><th style="white-space:nowrap">Req No</th><th style="white-space:nowrap">Date</th><th style="white-space:nowrap">Vendor</th><th>Description</th><th style="white-space:nowrap">Category</th><th class="right" style="white-space:nowrap">Net Amt</th><th class="right" style="white-space:nowrap">GST</th></tr>`;
   const invCols = `<colgroup><col style="width:15%"><col style="width:13%"><col style="width:11%"><col style="width:22%"><col style="width:10%"><col style="width:15%"><col style="width:14%"></colgroup>`;
@@ -492,9 +401,8 @@ function buildDetailedBillHtml(
     : `<colgroup><col style="width:14%"><col style="width:13%"><col style="width:10%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:12%"><col style="width:13%"><col style="width:10%"></colgroup>`;
   const pharmFoot = `${pharmacyReturn > 0 ? `<tr class="total-row"><td colspan="${pharmSpan + 1}">Pharmacy Sub Total</td><td class="right">${fmt(pharmTotal + pharmacyReturn)}</td><td></td></tr><tr class="total-row"><td colspan="${pharmSpan + 1}" style="color:#ef4444">(-) Pharmacy Return</td><td class="right" style="color:#ef4444">${fmt(pharmacyReturn)}</td><td></td></tr>` : ""}<tr class="total-row"><td colspan="${pharmSpan + 1}">Pharmacy Total</td><td class="right">${fmt(pharmTotal)}</td><td class="right">${pharmGstTotal > 0 ? fmt(pharmGstTotal) : "—"}</td></tr>`;
 
-  const { header: billHeader, intro: billIntro } = billHeaderHtml(logo, billType, patient);
+  const billHeader = patientHeaderHtml(logo, `${billType} Details`, patient);
   return wrapPrintDoc(billHeader, [
-    billIntro,
     showBedSection ? `
 <h2>Bed Details</h2>
 <table>
@@ -512,7 +420,7 @@ function buildDetailedBillHtml(
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
       visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
-      doctorGross, doctorDiscount),
+      doctorGross, doctorDiscount, patient),
   ]);
 }
 
@@ -581,13 +489,40 @@ function buildSummaryBillHtml(
         <td class="right">—</td>
       </tr>` : "");
 
-  const svcGroupRows = Object.entries(serviceGroups).map(([grp, data]) => `
+  // Item-level Services table — grouped by service group with the group name
+  // as a subheader row (same treatment as the detailed bill), so the summary
+  // bill lists the actual service items rather than only group totals.
+  const regularEntries = entries.filter(e => !e.doctorName);
+  const svcGroupOrder: string[] = [];
+  const svcByGroup: Record<string, BillingEntry[]> = {};
+  regularEntries.forEach(e => {
+    if (!svcByGroup[e.serviceGroup]) { svcByGroup[e.serviceGroup] = []; svcGroupOrder.push(e.serviceGroup); }
+    svcByGroup[e.serviceGroup].push(e);
+  });
+  const svcColCount = grpHasDisc ? 7 : 6;
+  let svcRowIdx = 0;
+  const svcItemRowArr = svcGroupOrder.flatMap(grp => [
+    `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
+    ...svcByGroup[grp].map(e => {
+      svcRowIdx++;
+      const disc = e.unitCharge * e.quantity - e.totalCharge;
+      return `
     <tr>
-      <td>${grp}</td>
-      <td class="right">${fmt(data.gross)}</td>
-      ${grpHasDisc ? `<td class="right" style="color:#ef4444">${data.discount > 0 ? fmt(data.discount) : "—"}</td>` : ""}
-      <td class="right bold">${fmt(data.net)}</td>
-    </tr>`).join("");
+      <td>${svcRowIdx}</td>
+      <td>${fmtDate(e.date)}</td>
+      <td>${e.serviceName}</td>
+      <td class="center">${e.quantity}</td>
+      <td class="right">${fmt(e.unitCharge)}</td>
+      ${grpHasDisc ? `<td class="right">${disc > 0 ? `<span style="color:#ef4444">${fmt(disc)}</span>` : "—"}</td>` : ""}
+      <td class="right bold">${fmt(e.totalCharge)}</td>
+    </tr>`;
+    }),
+  ]);
+  const svcItemHead = `<tr><th>#</th><th>Date</th><th>Service</th><th class="center">Qty</th><th class="right">Rate</th>${grpHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Net Amount</th></tr>`;
+  const svcItemCols = grpHasDisc
+    ? `<colgroup><col style="width:4%"><col style="width:12%"><col style="width:34%"><col style="width:8%"><col style="width:13%"><col style="width:13%"><col style="width:16%"></colgroup>`
+    : `<colgroup><col style="width:4%"><col style="width:13%"><col style="width:39%"><col style="width:9%"><col style="width:15%"><col style="width:20%"></colgroup>`;
+  const svcItemFoot = `<tr class="total-row"><td colspan="5">Total</td>${grpHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td></tr>`;
 
   // Summary bill shows one row per Investigation requisition / Pharmacy bill
   // (not per line item) — with each bill's date, sorted ascending — followed
@@ -632,9 +567,8 @@ function buildSummaryBillHtml(
 
   const showBedSection = bedAllotments.length > 0 || (fallbackBed && fallbackBed.charge > 0);
 
-  const { header: billHeader, intro: billIntro } = billHeaderHtml(logo, billType, patient);
+  const billHeader = patientHeaderHtml(logo, `${billType} Details`, patient);
   return wrapPrintDoc(billHeader, [
-    billIntro,
     showBedSection ? `
 <h2>Bed Details</h2>
 <table>
@@ -644,20 +578,7 @@ function buildSummaryBillHtml(
     <tr class="total-row"><td colspan="6">Total Bed Charge</td><td class="right">${fmt(totalBedCharge)}</td><td class="right">${bedGstTotal > 0 ? fmt(bedGstTotal) : "—"}</td></tr>
   </tbody>
 </table>` : "",
-    `
-<h2>Services (Nursing Home Charges)</h2>
-<table>
-  <thead><tr><th>Service Group</th><th class="right">Gross</th>${grpHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Net</th></tr></thead>
-  <tbody>
-    ${svcGroupRows}
-    <tr class="total-row">
-      <td>Total</td>
-      <td class="right"></td>
-      ${grpHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}
-      <td class="right">${fmt(servicesNet)}</td>
-    </tr>
-  </tbody>
-</table>`,
+    ...chunkTableSections("Services (Nursing Home Charges)", svcItemCols, svcItemHead, svcItemRowArr, svcItemFoot),
     doctorBox,
     ...(investigations.length > 0
       ? chunkTableSections("Investigations", invCols, invHead, invRowArr, invFoot) : []),
@@ -665,7 +586,7 @@ function buildSummaryBillHtml(
       ? chunkTableSections("Pharmacy", pharmCols, pharmHead, pharmRowArr, pharmFoot) : []),
     totalsBlock(totalBedCharge, servicesGross, invTotal, pharmTotal, servicesDiscount, billDiscAmt, grandTotal, receiptSummary, totalGst, gstBreakdown,
       visibleDiscountSections(entries, investigations, pharmBills, discHidden), patient?.billComment || "", discHidden.summary,
-      doctorGross, doctorDiscount),
+      doctorGross, doctorDiscount, patient),
   ]);
 }
 
@@ -1123,6 +1044,14 @@ export default function IpdBilling() {
                 <div>
                   <span className="text-xs text-gray-500 block">Adm Date</span>
                   <span>{fmtDate(patient.admissionDate)} {patient.admissionTime || ""}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 block">Admission No</span>
+                  <span className="font-mono font-semibold">{formatAdmissionNumber(patient.admissionDate, patient.admissionId)}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 block">Invoice No</span>
+                  <span className="font-mono font-semibold">{formatInvoiceNumber(patient.admissionDate, patient.admissionId)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500 block">Status</span>

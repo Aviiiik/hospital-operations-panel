@@ -56,6 +56,26 @@ function combineISTDateTime(d: Date | string, time?: string): Date {
   return new Date(new Date(`${dateStr}T00:00:00.000Z`).getTime() - 5.5 * 3600000 + h * 3600000 + m * 60000);
 }
 
+// ─── Admission No. / Invoice No. (derived, never stored) ──────────────────────
+// Mirrors the frontend helpers of the same name in frontend/src/services/ipdService.ts.
+export function formatAdmissionNumber(admissionDate: Date | string, admissionId: string): string {
+  const dateStr = toISTDateStr(admissionDate);
+  const [yyyy, mm] = dateStr.split("-");
+  const last4 = (admissionId || "").slice(-4);
+  return `${yyyy.slice(-2)}${mm}/${last4}`;
+}
+
+export function formatInvoiceNumber(admissionDate: Date | string, admissionId: string): string {
+  const dateStr = toISTDateStr(admissionDate);
+  const [yyyyStr, mmStr] = dateStr.split("-");
+  const year = parseInt(yyyyStr, 10);
+  const month = parseInt(mmStr, 10);
+  const fyStart = month >= 4 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  const last4 = (admissionId || "").slice(-4);
+  return `${String(fyStart).slice(-2)}${String(fyEnd).slice(-2)}/${last4}`;
+}
+
 // ─── ID Generation ────────────────────────────────────────────────────────────
 
 async function generateAdmissionId(): Promise<string> {

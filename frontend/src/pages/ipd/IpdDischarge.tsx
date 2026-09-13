@@ -13,7 +13,7 @@ import ipdService, {
   todayIST, nowISTTime, toISTDateStr, buildDiscountSections,
 } from "@/services/ipdService";
 import logoUrl from "@/assets/logo.png";
-import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS } from "@/lib/ipdPrint";
+import { printViaHiddenIframe, wrapPrintDoc, DOC_GRID_CSS, patientHeaderHtml, PATIENT_HEADER_CSS } from "@/lib/ipdPrint";
 
 function todayStr() { return todayIST(); }
 function nowTimeStr() { return nowISTTime(); }
@@ -46,20 +46,12 @@ function SectionArea({
 
 // ── Print discharge certificate (matches PDF exactly) ─────────────────────────
 function printDischargeCertificate(patient: any, form: any, logo: string) {
-  const admDate = patient.admissionDate
-    ? fmtDateLong(patient.admissionDate)
-    : "—";
   const disDate = form.dischargeDate
     ? fmtDateLong(form.dischargeDate)
     : "—";
-  const admTime   = patient.admissionTime || "";
-  const disTime   = form.dischargeTime   || "";
   const doctor    = patient.doctors?.length
     ? patient.doctors.map((d: any) => d.doctorName).join(", ")
     : "—";
-  const bedInfo   = `${patient.bedNo || "—"} ${patient.bedCategory ? `(${patient.bedCategory})` : ""}`;
-  const age       = patient.ageYears ? `${patient.ageYears} Year` : "—";
-  const sexAge    = `${patient.gender || "—"} / ${age}`;
   const now       = new Date();
   const printDate = now.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" })
     + " " + now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
@@ -73,23 +65,9 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
 
   const css = `
   ${DOC_GRID_CSS}
+  ${PATIENT_HEADER_CSS}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:11.5px;color:#000;padding:20px 24px}
-  .page-header{display:flex;align-items:stretch;border:1.5px solid #000;margin-bottom:14px;height:118px;overflow:hidden}
-  .logo-cell{padding:8px 12px;display:flex;align-items:center;border-right:1.5px solid #000;min-width:90px}
-  .logo-cell img{width:75px;height:75px;object-fit:contain}
-  .hospital-cell{flex:1;text-align:center;padding:8px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .h-name{font-size:17px;font-weight:bold;letter-spacing:0.02em}
-  .h-sub{font-size:11px;margin-top:1px}
-  .h-reg{font-size:11px;font-weight:bold;margin-top:3px}
-  .h-addr{font-size:11px;margin-top:1px}
-  .h-phone{font-size:11px;margin-top:1px}
-  .cert-title{text-align:center;font-size:14px;font-weight:bold;text-decoration:underline;margin:10px 0 12px}
-  .info-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11.5px}
-  .info-table td{padding:2px 4px;vertical-align:top}
-  .lbl{font-weight:normal;color:#000;white-space:nowrap;width:120px}
-  .col{width:16px;text-align:center}
-  .val{font-weight:normal}
   .disc-title{text-align:center;font-size:13px;font-weight:bold;text-decoration:underline;margin:14px 0 10px}
   .sec-title{font-weight:bold;text-decoration:underline;margin:10px 0 2px;font-size:11.5px}
   .sec-body{font-size:11.5px;margin-bottom:2px;line-height:1.5}
@@ -106,16 +84,21 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   .print-date{text-align:left;font-size:10px;color:#333;margin-top:10px}
   .page-footer{font-size:9px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:4px}
   @media print{
-    body{padding:0}
-    /* .page-header rides in the doc-grid <thead> (repeats every page, keeps
-       content clear); the header→body gap is the <thead> cell padding-bottom
-       (DOC_GRID_CSS). .page-footer is fixed to the paper bottom and painted
-       into the strip the <tfoot> spacer reserves, so it repeats without ever
-       overlapping content. */
-    .page-header{margin-bottom:6px}
-    .page-footer{position:fixed;left:18px;right:18px;bottom:0;background:#fff;
+    /* @page margin is 0 (see below) so left/right margin comes from body
+       padding instead — that still applies on every printed page. */
+    body{padding:0 18px}
+    /* Header (hospital box + patient grid, from patientHeaderHtml) rides in
+       the doc-grid <thead> (repeats every page, keeps content clear); the
+       header→body gap is the <thead> cell padding-bottom (DOC_GRID_CSS).
+       .page-footer is fixed to the paper bottom and painted into the strip
+       the <tfoot> spacer reserves, so it repeats without ever overlapping
+       content. */
+    .page-footer{position:fixed;left:18px;right:18px;bottom:8px;background:#fff;
       height:30px;display:flex;align-items:flex-end;justify-content:center;padding:0 0 6px}
-    @page{margin:20px 18px}
+    /* margin:0 stops Chrome drawing its own header/footer (page URL/title) —
+       with no page margin left, it has nowhere to draw it. Our own top gap
+       comes from the repeating header's own top padding (PATIENT_HEADER_CSS). */
+    @page{size:A4;margin:0}
   }
   @media screen{
     .doc-grid > tfoot{display:none}
@@ -123,61 +106,19 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
   }
 `;
 
-  const header = `
-<div class="page-header">
-  <div class="logo-cell"><img src="${logo}" alt="Logo"/></div>
-  <div class="hospital-cell">
-    <div class="h-name">AROGYA MATERNITY &amp; NURSING HOME</div>
-    <div class="h-sub">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
-    <div class="h-sub">(Licence Under W.B.Clinical Establishment Act)</div>
-    <div class="h-reg">Regd.No:- 34235649</div>
-    <div class="h-addr">71,TOLLYGUNGE CIRCULAR ROAD, KOLKATA-700053</div>
-    <div class="h-addr">(NEW ALIPORE, SITAL SADAN COMPOUND)</div>
-    <div class="h-phone">Phone:- (033) 2400-0681 / 0684&nbsp;&nbsp;&nbsp;Fax No:- (033) 2400-1180</div>
-  </div>
-</div>`;
+  // Repeating hospital box + patient details — shared with every other IPD
+  // print (Billing, Receipt, Investigation, Pharmacy) via patientHeaderHtml().
+  // Discharge-specific fields (discharge date/type) don't belong on the shared
+  // component, so discharge date rides along on the patient object passed in,
+  // and Discharge Type prints as its own line just below the header.
+  const header = patientHeaderHtml(logo, "Discharge Certificate", {
+    ...patient,
+    dischargeDate: form.dischargeDate,
+    dischargeTime: form.dischargeTime,
+  });
 
   const infoSection = `
-<div class="cert-title">DISCHARGE CERTIFICATE</div>
-<table class="info-table">
-  <tr>
-    <td class="lbl">Patient Id</td><td class="col">:</td>
-    <td class="val">${patient.ipdRegistrationNo || patient.admissionId}</td>
-    <td width="40"></td>
-    <td class="lbl">Bed No.</td><td class="col">:</td>
-    <td class="val">${bedInfo}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Admission No</td><td class="col">:</td>
-    <td class="val">${patient.admissionId}</td>
-    <td></td>
-    <td class="lbl">Admission Dt.</td><td class="col">:</td>
-    <td class="val">${admDate}&nbsp;&nbsp;${admTime}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Admitting Doctor</td><td class="col">:</td>
-    <td class="val">${doctor}</td>
-    <td></td>
-    <td class="lbl">Discharge Dt.</td><td class="col">:</td>
-    <td class="val">${disDate}&nbsp;&nbsp;${disTime}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Patient Name</td><td class="col">:</td>
-    <td class="val">${patient.title} ${patient.name}</td>
-    <td></td>
-    <td class="lbl">Discharge Type</td><td class="col">:</td>
-    <td class="val"><strong>${form.dischargeType || "—"}</strong></td>
-  </tr>
-  <tr>
-    <td class="lbl">Sex / Age</td><td class="col">:</td>
-    <td class="val">${sexAge}</td>
-    <td></td><td></td><td></td><td></td>
-  </tr>
-  <tr>
-    <td class="lbl">Address</td><td class="col">:</td>
-    <td class="val" colspan="4">${patient.address || "—"}</td>
-  </tr>
-</table>`;
+<div style="text-align:center;font-size:11.5px;margin:-4px 0 10px">Discharge Type: <strong>${form.dischargeType || "—"}</strong></div>`;
 
   const footerBlock = `
 <div class="footer">
@@ -188,7 +129,7 @@ function printDischargeCertificate(patient: any, form: any, logo: string) {
       <div class="checkbox-row"><span class="checkbox"></span>All Investigation Report/s received.</div>
       <div class="checkbox-row"><span class="checkbox"></span>Original Copy of discharge summary received</div>
       <div class="checkbox-row"><span class="checkbox"></span>Advices are explained to me in my language.</div>
-      <div class="checked-by">Checked By :.............................................................. ${doctor}</div>
+      <div class="checked-by">Checked By :..............................................................</div>
       <div style="font-size:11px;margin-top:4px">Date : ${disDate}</div>
     </div>
     <div class="sig-right">
