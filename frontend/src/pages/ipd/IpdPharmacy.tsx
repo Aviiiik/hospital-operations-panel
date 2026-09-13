@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Pill, Pencil, RotateCc
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { todayIST } from "@/services/ipdService";
-import { openIpdPrintWindow, hospitalHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, patientHeaderHtml, wrapPrintDoc, chunkTableSections, amountInWordsHtml } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -119,8 +119,6 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
 <div class="info-grid">
   <div><div class="info-label">Bill No</div><div class="info-val" style="font-family:monospace">${bill.vendorBillNo || "—"}</div></div>
   <div><div class="info-label">Bill Date</div><div class="info-val">${fmtDate(bill.billDate)}</div></div>
-  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
-  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
   <div><div class="info-label">Vendor</div><div class="info-val">${bill.vendor || "—"}</div></div>
   <div><div class="info-label">Referred By</div><div class="info-val">${bill.referredBy || "—"}</div></div>
 </div>`;
@@ -141,11 +139,11 @@ function printPharmacyBill(patient: any, bill: PharmBill, logo: string) {
 </div>`;
 
   const body = wrapPrintDoc(
-    hospitalHeaderHtml(logo),
+    patientHeaderHtml(logo, "Pharmacy Bill", patient),
     [
-      `<div class="doc-title">Pharmacy Bill</div>`,
       infoBlock,
       ...chunkTableSections("Items", phCols, phHead, rowArr, phFoot),
+      amountInWordsHtml(bill.netAmount || 0),
       sigBlock,
     ],
   );
@@ -164,8 +162,6 @@ function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
 
   const infoBlock = `
 <div class="info-grid">
-  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
-  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
   <div><div class="info-label">Pharmacy Bills</div><div class="info-val">${bills.length}</div></div>
   <div><div class="info-label">Printed</div><div class="info-val">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div></div>
 </div>`;
@@ -206,8 +202,8 @@ function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
 </div>`;
 
   const body = wrapPrintDoc(
-    hospitalHeaderHtml(logo),
-    [`<div class="doc-title">Pharmacy Bills</div>`, infoBlock, ...billSections, grandSection, sigBlock],
+    patientHeaderHtml(logo, "Pharmacy Bills", patient),
+    [infoBlock, ...billSections, grandSection, amountInWordsHtml(grandTotal), sigBlock],
   );
 
   openIpdPrintWindow(`Pharmacy Bills — ${patient.admissionId}`, body);

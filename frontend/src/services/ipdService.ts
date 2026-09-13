@@ -258,6 +258,34 @@ export function combineISTDateTime(d: Date | string, time?: string): Date {
   return new Date(new Date(`${dateStr}T00:00:00.000Z`).getTime() - IST_OFFSET_MS + h * 3600000 + m * 60000);
 }
 
+// ─── Admission No. / Invoice No. (derived, never stored) ──────────────────────
+// Both are computed at render time from the admission date + the raw
+// `admissionId` (e.g. "IPD202600123") — never persisted as separate fields.
+// Mirrored in backend/src/services/ipdService.ts.
+//
+//  - Admission No. = <YY><MM>/<last 4 chars of admissionId>, where YY/MM are
+//    the admission's IST calendar year/month. Admitted Sep 2026 → "2609/xxxx".
+//  - Invoice No. = <FY start YY><FY end YY>/<last 4 chars of admissionId>,
+//    Indian financial year (Apr–Mar) keyed off the admission date, fixed for
+//    the life of the admission. Admitted Sep 2026 → FY 2026-27 → "2627/xxxx".
+export function formatAdmissionNumber(admissionDate: Date | string, admissionId: string): string {
+  const dateStr = toISTDateStr(admissionDate);
+  const [yyyy, mm] = dateStr.split("-");
+  const last4 = (admissionId || "").slice(-4);
+  return `${yyyy.slice(-2)}${mm}/${last4}`;
+}
+
+export function formatInvoiceNumber(admissionDate: Date | string, admissionId: string): string {
+  const dateStr = toISTDateStr(admissionDate);
+  const [yyyyStr, mmStr] = dateStr.split("-");
+  const year = parseInt(yyyyStr, 10);
+  const month = parseInt(mmStr, 10); // 1-indexed
+  const fyStart = month >= 4 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  const last4 = (admissionId || "").slice(-4);
+  return `${String(fyStart).slice(-2)}${String(fyEnd).slice(-2)}/${last4}`;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const BED_CATEGORIES = [
@@ -275,7 +303,7 @@ export const BED_CATEGORIES = [
 export const BLOOD_GROUPS        = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 export const DIET_TYPES          = ["General", "Diabetic", "Low Salt", "Liquid", "Soft", "NPO"];
 export const TREATMENT_CATEGORIES= ["General", "Surgical", "Maternity", "ICU", "Emergency", "Paediatric", "Gynaecology", "Orthopaedic"];
-export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "ESI", "CGHS"];
+export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "Mediclaim", "ESI", "CGHS"];
 export const IPD_DEPARTMENTS     = ["OPD", "IPD", "DAYCARE", "MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
 export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred","Normal","DORB"];
 

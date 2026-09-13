@@ -15,7 +15,7 @@ import { ArrowLeft, Plus, Trash2, Pencil, Save, X, ChevronDown, ChevronUp, Print
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationVendor, InvestigationItem, todayIST, nowISTTime } from "@/services/ipdService";
-import { openIpdPrintWindow, hospitalHeaderHtml, wrapPrintDoc, chunkTableSections } from "@/lib/ipdPrint";
+import { openIpdPrintWindow, patientHeaderHtml, wrapPrintDoc, chunkTableSections, amountInWordsHtml } from "@/lib/ipdPrint";
 import logoUrl from "@/assets/logo.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ function fmtMoney(n: number) {
 }
 
 // ─── Build the print sections for one requisition ─────────────────────────────
-function invRequisitionSections(patient: any, inv: Investigation) {
+function invRequisitionSections(inv: Investigation) {
   const rowArr = (inv.items || []).filter((it: any) => it.description).map((it: any, i: number) => `
     <tr>
       <td class="center">${i + 1}</td>
@@ -98,9 +98,6 @@ function invRequisitionSections(patient: any, inv: Investigation) {
 <div class="info-grid">
   <div><div class="info-label">Req No</div><div class="info-val" style="font-family:monospace">${inv.reqNo}</div></div>
   <div><div class="info-label">Req Date / Time</div><div class="info-val">${fmtDate(inv.reqDate)} ${inv.reqTime || ""}</div></div>
-  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
-  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
-  <div><div class="info-label">Age / Sex</div><div class="info-val">${patient.ageYears ? patient.ageYears + "Y " : ""}${patient.gender || "—"}</div></div>
   <div><div class="info-label">Collection Centre</div><div class="info-val">${inv.collectionCentre || "—"}</div></div>
   <div><div class="info-label">Referred By</div><div class="info-val">${inv.referredBy || "—"}</div></div>
   <div><div class="info-label">Vendor</div><div class="info-val">${inv.vendor || "—"}${inv.vendorBillNo ? ` (${inv.vendorBillNo})` : ""}</div></div>
@@ -121,6 +118,7 @@ function invRequisitionSections(patient: any, inv: Investigation) {
   return [
     infoBlock,
     ...chunkTableSections(`Investigation Items — ${inv.reqNo}`, invCols, invHead, rowArr, invFoot),
+    amountInWordsHtml(inv.totalAmount || 0),
     sigBlock,
   ];
 }
@@ -128,8 +126,8 @@ function invRequisitionSections(patient: any, inv: Investigation) {
 // ─── Print a single investigation requisition ─────────────────────────────────
 function printInvestigationRequisition(patient: any, inv: Investigation, logo: string) {
   const body = wrapPrintDoc(
-    hospitalHeaderHtml(logo),
-    [`<div class="doc-title">Investigation Requisition</div>`, ...invRequisitionSections(patient, inv)],
+    patientHeaderHtml(logo, "Investigation Requisition", patient),
+    invRequisitionSections(inv),
   );
   openIpdPrintWindow(`Investigation Requisition — ${inv.reqNo}`, body);
 }
@@ -148,9 +146,6 @@ function printAllInvestigationRequisitions(patient: any, invs: Investigation[], 
 
   const infoBlock = `
 <div class="info-grid">
-  <div><div class="info-label">Patient Name</div><div class="info-val">${patient.title} ${patient.name}</div></div>
-  <div><div class="info-label">Admission ID</div><div class="info-val" style="font-family:monospace">${patient.admissionId}</div></div>
-  <div><div class="info-label">Age / Sex</div><div class="info-val">${patient.ageYears ? patient.ageYears + "Y " : ""}${patient.gender || "—"}</div></div>
   <div><div class="info-label">Requisitions</div><div class="info-val">${invs.length}</div></div>
   <div><div class="info-label">Printed</div><div class="info-val">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div></div>
 </div>`;
@@ -188,8 +183,8 @@ function printAllInvestigationRequisitions(patient: any, invs: Investigation[], 
 </div>`;
 
   const body = wrapPrintDoc(
-    hospitalHeaderHtml(logo),
-    [`<div class="doc-title">Investigation Requisitions</div>`, infoBlock, ...reqSections, grandSection, sigBlock],
+    patientHeaderHtml(logo, "Investigation Requisitions", patient),
+    [infoBlock, ...reqSections, grandSection, amountInWordsHtml(grandTotal), sigBlock],
   );
   openIpdPrintWindow(`Investigation Requisitions — ${patient.admissionId}`, body);
 }
