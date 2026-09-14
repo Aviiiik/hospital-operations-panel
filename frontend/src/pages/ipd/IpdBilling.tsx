@@ -148,9 +148,14 @@ const BILL_PRINT_CSS = `
 `;
 
 function printDoctorServiceSlip(patient: any, entries: BillingEntry[], logo: string) {
+  const sigBlock = `
+<div class="signatures">
+  <div><div class="sig-line">Patient / Guardian</div></div>
+  <div><div class="sig-line">Authorised Signatory</div></div>
+</div>`;
   const body = wrapPrintDoc(
     patientHeaderHtml(logo, "Doctor / Consultation Services", patient),
-    [doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate)],
+    [doctorServiceBoxHtml(entries, patient.referredBy, fmt, fmtDate), sigBlock],
   );
   openIpdPrintWindow(`Doctor Services — ${patient.admissionId}`, body);
 }
@@ -194,7 +199,7 @@ function totalsBlock(
     ${totalTds > 0 ? `<div class="totals-row"><span>TDS</span><span>${fmt(totalTds)}</span></div>` : ""}
     ${totalDis > 0 ? `<div class="totals-row"><span>Disallowed</span><span>${fmt(totalDis)}</span></div>` : ""}
     <div class="totals-grand"><span>Payable By Patient</span><span>${fmt(netDue)}</span></div>
-    ${amountInWordsHtml(netDue, "Payable By Patient")}
+    ${amountInWordsHtml(netDue)}
   </div>
 </div>
 ${isCorporateCategory && companyName
@@ -312,12 +317,13 @@ function buildDetailedBillHtml(
   });
   const svcColCount = svcHasDisc ? 8 : 7;
   let svcRowIdx = 0;
-  const svcRowArr = svcGroupOrder.flatMap(grp => [
-    `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
-    ...svcByGroup[grp].map(e => {
+  const svcRowArr = svcGroupOrder.flatMap(grp => {
+    let grpDisc = 0, grpNet = 0, grpGst = 0;
+    const itemRows = svcByGroup[grp].map(e => {
       svcRowIdx++;
       const g = gstAmt(e.totalCharge, e.gst, e.gstType);
       const disc = e.unitCharge * e.quantity - e.totalCharge;
+      grpDisc += disc; grpNet += e.totalCharge; grpGst += g;
       return `
     <tr>
       <td>${svcRowIdx}</td>
@@ -329,8 +335,13 @@ function buildDetailedBillHtml(
       <td class="right bold">${fmt(e.totalCharge)}</td>
       <td class="right">${g > 0 ? fmt(g) : "—"}</td>
     </tr>`;
-    }),
-  ]);
+    });
+    return [
+      `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
+      ...itemRows,
+      `<tr class="total-row"><td colspan="5">${grp} Total</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${grpDisc > 0 ? fmt(grpDisc) : "—"}</td>` : ""}<td class="right">${fmt(grpNet)}</td><td class="right">${grpGst > 0 ? fmt(grpGst) : "—"}</td></tr>`,
+    ];
+  });
 
   const doctorBox = doctorServiceBoxHtml(doctorEntries, patient.referredBy, fmt, fmtDate);
 
@@ -389,7 +400,7 @@ function buildDetailedBillHtml(
   const svcCols = svcHasDisc
     ? `<colgroup><col style="width:4%"><col style="width:11%"><col style="width:32%"><col style="width:7%"><col style="width:11%"><col style="width:12%"><col style="width:15%"><col style="width:8%"></colgroup>`
     : `<colgroup><col style="width:4%"><col style="width:12%"><col style="width:36%"><col style="width:8%"><col style="width:13%"><col style="width:16%"><col style="width:11%"></colgroup>`;
-  const svcFoot = `<tr class="total-row"><td colspan="5">Nursing Home Charges</td>${svcHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td><td class="right">${svcGstTotal > 0 ? fmt(svcGstTotal) : "—"}</td></tr>`;
+  const svcFoot = "";
 
   const invHead = `<tr><th style="white-space:nowrap">Req No</th><th style="white-space:nowrap">Date</th><th style="white-space:nowrap">Vendor</th><th>Description</th><th style="white-space:nowrap">Category</th><th class="right" style="white-space:nowrap">Net Amt</th><th class="right" style="white-space:nowrap">GST</th></tr>`;
   const invCols = `<colgroup><col style="width:15%"><col style="width:13%"><col style="width:11%"><col style="width:22%"><col style="width:10%"><col style="width:15%"><col style="width:14%"></colgroup>`;
@@ -501,11 +512,12 @@ function buildSummaryBillHtml(
   });
   const svcColCount = grpHasDisc ? 7 : 6;
   let svcRowIdx = 0;
-  const svcItemRowArr = svcGroupOrder.flatMap(grp => [
-    `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
-    ...svcByGroup[grp].map(e => {
+  const svcItemRowArr = svcGroupOrder.flatMap(grp => {
+    let grpDisc = 0, grpNet = 0;
+    const itemRows = svcByGroup[grp].map(e => {
       svcRowIdx++;
       const disc = e.unitCharge * e.quantity - e.totalCharge;
+      grpDisc += disc; grpNet += e.totalCharge;
       return `
     <tr>
       <td>${svcRowIdx}</td>
@@ -516,13 +528,18 @@ function buildSummaryBillHtml(
       ${grpHasDisc ? `<td class="right">${disc > 0 ? `<span style="color:#ef4444">${fmt(disc)}</span>` : "—"}</td>` : ""}
       <td class="right bold">${fmt(e.totalCharge)}</td>
     </tr>`;
-    }),
-  ]);
+    });
+    return [
+      `<tr class="group-row"><td colspan="${svcColCount}">${grp}</td></tr>`,
+      ...itemRows,
+      `<tr class="total-row"><td colspan="5">${grp} Total</td>${grpHasDisc ? `<td class="right" style="color:#ef4444">${grpDisc > 0 ? fmt(grpDisc) : "—"}</td>` : ""}<td class="right">${fmt(grpNet)}</td></tr>`,
+    ];
+  });
   const svcItemHead = `<tr><th>#</th><th>Date</th><th>Service</th><th class="center">Qty</th><th class="right">Rate</th>${grpHasDisc ? `<th class="right">Discount</th>` : ""}<th class="right">Net Amount</th></tr>`;
   const svcItemCols = grpHasDisc
     ? `<colgroup><col style="width:4%"><col style="width:12%"><col style="width:34%"><col style="width:8%"><col style="width:13%"><col style="width:13%"><col style="width:16%"></colgroup>`
     : `<colgroup><col style="width:4%"><col style="width:13%"><col style="width:39%"><col style="width:9%"><col style="width:15%"><col style="width:20%"></colgroup>`;
-  const svcItemFoot = `<tr class="total-row"><td colspan="5">Total</td>${grpHasDisc ? `<td class="right" style="color:#ef4444">${servicesDiscount > 0 ? fmt(servicesDiscount) : "—"}</td>` : ""}<td class="right">${fmt(servicesNet)}</td></tr>`;
+  const svcItemFoot = "";
 
   // Summary bill shows one row per Investigation requisition / Pharmacy bill
   // (not per line item) — with each bill's date, sorted ascending — followed
