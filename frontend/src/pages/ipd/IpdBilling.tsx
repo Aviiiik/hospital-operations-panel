@@ -262,7 +262,6 @@ function buildDetailedBillHtml(
   totalBedCharge: number,
   servicesDiscount: number,
   servicesGross: number,
-  servicesNet: number,
   invTotal: number,
   pharmTotal: number,
   pharmacyReturn: number,
@@ -278,7 +277,6 @@ function buildDetailedBillHtml(
 
   const doctorEntries  = entries.filter(e => e.doctorName);
   const regularEntries = entries.filter(e => !e.doctorName);
-  const svcGstTotal    = regularEntries.reduce((s, e) => s + gstAmt(e.totalCharge, e.gst, e.gstType), 0);
   const doctorGross    = doctorEntries.reduce((s, e) => s + e.unitCharge * e.quantity, 0);
   const doctorDiscount = doctorEntries.reduce((s, e) => s + (e.unitCharge * e.quantity - e.totalCharge), 0);
 
@@ -445,7 +443,6 @@ function buildSummaryBillHtml(
   serviceGroups: Record<string, { gross: number; discount: number; net: number }>,
   servicesDiscount: number,
   servicesGross: number,
-  servicesNet: number,
   invTotal: number,
   pharmTotal: number,
   pharmacyReturn: number,
@@ -983,7 +980,7 @@ export default function IpdBilling() {
       buildDetailedBillHtml(
         billLabel, patient, entries, investigations, bedAllotments, pharmBills,
         fallbackBed, fallbackEndDate,
-        totalBedCharge, servicesDiscount, servicesGross, servicesNet,
+        totalBedCharge, servicesDiscount, servicesGross,
         invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         totalGst, gstBreakdown, discHidden,
       ),
@@ -997,7 +994,7 @@ export default function IpdBilling() {
         billLabel, patient, bedAllotments, fallbackBed, fallbackEndDate,
         totalBedCharge,
         Object.fromEntries(Object.entries(serviceGroups).map(([k, v]) => [k, { gross: v.gross, discount: v.discount, net: v.net }])),
-        servicesDiscount, servicesGross, servicesNet, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
+        servicesDiscount, servicesGross, invTotal, pharmTotal, pharmacyReturn, billDiscAmt, grandTotal, receiptSummary, logoUrl,
         investigations, pharmBills, entries, totalGst, gstBreakdown, discHidden,
       ),
       BILL_PRINT_CSS,
