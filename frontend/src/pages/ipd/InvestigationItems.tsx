@@ -9,7 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import ipdService, { InvestigationItem, InvestigationVendor } from "@/services/ipdService";
@@ -55,6 +55,12 @@ export default function InvestigationItems() {
   const [formPatientRate, setFormPatientRate] = useState("");
   const [formVendorCode,  setFormVendorCode]  = useState("AROGYA");
   const [formActive,      setFormActive]      = useState(true);
+
+  // Batch migration
+  const [batchMode,      setBatchMode]      = useState(false);
+  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(new Set());
+  const [migrateVendor,  setMigrateVendor]  = useState("__none__");
+  const [migrating,      setMigrating]      = useState(false);
 
   const loadAll = () => {
     setLoading(true);
@@ -169,6 +175,44 @@ export default function InvestigationItems() {
     }
   }
 
+  function toggleBatchMode() {
+    setBatchMode(prev => !prev);
+    setSelectedIds(new Set());
+    setMigrateVendor("__none__");
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleMigrate() {
+    if (selectedIds.size === 0) return toast.error("Select at least 1 item to migrate");
+    if (migrateVendor === "__none__") return toast.error("Choose a target vendor");
+    const vendorObj = vendors.find(v => v.code === migrateVendor);
+    if (!(await confirm({
+      title: "Batch migrate items?",
+      description: `${selectedIds.size} item(s) will be moved to vendor "${vendorObj?.name || migrateVendor}".`,
+      confirmText: "Yes, migrate",
+    }))) return;
+    setMigrating(true);
+    try {
+      await ipdService.migrateInvestigationItemsVendor(Array.from(selectedIds), migrateVendor);
+      toast.success(`${selectedIds.size} item(s) migrated`);
+      setSelectedIds(new Set());
+      setMigrateVendor("__none__");
+      setBatchMode(false);
+      loadAll();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Migration failed");
+    } finally {
+      setMigrating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -179,10 +223,47 @@ export default function InvestigationItems() {
             Test catalogue by vendor — {items.length} total items
           </p>
         </div>
-        <Button onClick={openAdd} className="h-8 text-xs bg-blue-600 hover:bg-blue-700 gap-1.5">
-          <Plus className="h-4 w-4" /> Add Item
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={toggleBatchMode}
+            variant={batchMode ? "default" : "outline"}
+            className={`h-8 text-xs gap-1.5 ${batchMode ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+          >
+            <ArrowRightLeft className="h-4 w-4" /> Batch Migration
+          </Button>
+          <Button onClick={openAdd} className="h-8 text-xs bg-blue-600 hover:bg-blue-700 gap-1.5">
+            <Plus className="h-4 w-4" /> Add Item
+          </Button>
+        </div>
       </div>
+
+      {/* Batch migration toolbar */}
+      {batchMode && (
+        <div className="flex flex-wrap items-center gap-2 border rounded-md bg-amber-50 border-amber-200 px-3 py-2">
+          <span className="text-xs text-amber-800 font-medium">
+            {selectedIds.size} item{selectedIds.size === 1 ? "" : "s"} selected
+          </span>
+          <Select value={migrateVendor} onValueChange={setMigrateVendor}>
+            <SelectTrigger className="h-8 text-xs w-48 bg-white">
+              <SelectValue placeholder="Migrate to vendor…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__" disabled>Select target vendor</SelectItem>
+              {vendors.map(v => (
+                <SelectItem key={v._id} value={v.code}>{v.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            className="h-8 text-xs bg-amber-600 hover:bg-amber-700"
+            disabled={selectedIds.size === 0 || migrateVendor === "__none__" || migrating}
+            onClick={handleMigrate}
+          >
+            {migrating ? "Migrating…" : "Migrate"}
+          </Button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -239,6 +320,7 @@ export default function InvestigationItems() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b text-gray-600">
+                {batchMode && <th className="px-3 py-2.5 text-left font-medium w-8"></th>}
                 <th className="px-3 py-2.5 text-left font-medium w-16">Code</th>
                 <th className="px-3 py-2.5 text-left font-medium">Test Name</th>
                 <th className="px-3 py-2.5 text-left font-medium w-28">Category</th>
@@ -253,13 +335,23 @@ export default function InvestigationItems() {
               {sortedCategories.map(cat => (
                 <React.Fragment key={cat}>
                   <tr className="bg-gray-50 border-b border-t">
-                    <td colSpan={8}
+                    <td colSpan={batchMode ? 9 : 8}
                       className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${CATEGORY_COLORS[cat] || "text-gray-500"}`}>
                       {cat} — {grouped[cat].length} tests
                     </td>
                   </tr>
                   {grouped[cat].map((item) => (
                     <tr key={item._id} className="border-b last:border-0 hover:bg-gray-50">
+                      {batchMode && (
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item._id)}
+                            onChange={() => toggleSelected(item._id)}
+                            className="h-3.5 w-3.5 accent-amber-600"
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-2 font-mono text-gray-500">{item.slNo ?? "—"}</td>
                       <td className="px-3 py-2 font-medium text-gray-800">{item.name}</td>
                       <td className="px-3 py-2">

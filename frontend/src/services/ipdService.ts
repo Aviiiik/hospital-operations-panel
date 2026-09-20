@@ -169,7 +169,11 @@ export function computeBillingDays(admissionDate: Date | string, currentDate = n
 //  - serviceEntries: billing entries ({ unitCharge, quantity, totalCharge }).
 //      Pass [] when only an aggregate services discount is available (IpdDischarge)
 //      and supply it via `servicesDiscountFallback`.
-//  - investigations: [{ items: [{ amount, netAmount }] }] — discount = amount − netAmount.
+//  - investigations: accepted for call-site compatibility but produces no row —
+//      an item's `amount`/`netAmount` are Lab Amt (labRate, vendor cost) vs.
+//      Net Amt (patientRate, patient charge), not a gross/discount pair, so
+//      "amount − netAmount" is not a real discount (it used to surface a bogus
+//      positive "Investigation Discount" whenever Lab Amt exceeded Net Amt).
 //  - pharmBills:      [{ items: [{ mrp, qty, netAmount }], billDiscount, billDiscountType }]
 //      discount = Σ(mrp×qty − item.netAmount) + the bill-level discount.
 export interface IpdDiscountSection {
@@ -194,13 +198,8 @@ export function buildDiscountSections(
   const servicesTotal = svcDisc > 0.001 ? svcDisc : (servicesDiscountFallback > 0.001 ? servicesDiscountFallback : 0);
   if (servicesTotal > 0.001) sections.push({ section: "Services", total: r2(servicesTotal) });
 
-  // Investigation — sum of (lab amount − net) across every requisition item
-  const invDisc = (investigations || []).reduce((s, inv) =>
-    s + (inv.items || []).reduce((si: number, it: any) => {
-      const disc = (Number(it.amount) || 0) - (Number(it.netAmount) || 0);
-      return si + (disc > 0 ? disc : 0);
-    }, 0), 0);
-  if (invDisc > 0.001) sections.push({ section: "Investigation", total: r2(invDisc) });
+  // Investigation — no genuine per-item discount concept exists (Lab Amt vs.
+  // Net Amt is cost-vs-charge, not gross-vs-discount), so no row is produced.
 
   // Pharmacy — sum of (MRP × qty − net) across every bill item, plus each bill's
   // bill-level discount (flat ₹ or % of the item-net subtotal).
@@ -376,6 +375,8 @@ const ipdService = {
   createInvestigationItem:  (data: any)   => api.post("/ipd/investigation-items", data),
   updateInvestigationItem:  (id: string, data: any) => api.put(`/ipd/investigation-items/${id}`, data),
   deleteInvestigationItem:  (id: string)  => api.delete(`/ipd/investigation-items/${id}`),
+  migrateInvestigationItemsVendor: (ids: string[], vendorCode: string) =>
+    api.post(`/ipd/investigation-items/migrate-vendor`, { ids, vendorCode }),
 
   // Service Catalogue
   getServiceCatalogue:        (all = false) => api.get("/ipd/service-catalogue", { params: all ? { all: "1" } : {} }),

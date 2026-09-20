@@ -426,6 +426,18 @@ router.delete("/investigation-items/:id", requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/investigation-items/migrate-vendor", requireAdmin, async (req, res) => {
+  try {
+    const { ids, vendorCode } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "No items selected" });
+    if (!vendorCode) return res.status(400).json({ message: "Target vendor is required" });
+    const result = await ipdService.migrateInvestigationItemsVendor(ids, vendorCode);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ─── Bed Allotment routes ─────────────────────────────────────────────────────
 
 router.get("/bed-allotments/:patientId", requireAdminOrReceptionist, async (req, res) => {
