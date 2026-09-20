@@ -183,7 +183,7 @@ export interface IpdDiscountSection {
 
 export function buildDiscountSections(
   serviceEntries: any[],
-  investigations: any[],
+  _investigations: any[],
   pharmBills: any[],
   servicesDiscountFallback = 0,
 ): IpdDiscountSection[] {
