@@ -487,7 +487,23 @@ export async function updateVendor(id: string, data: any) {
   const allowed = ["code", "name", "isActive"];
   const update: any = {};
   allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
-  return InvestigationVendor.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+
+  const before = await InvestigationVendor.findById(id).lean();
+  const vendor = await InvestigationVendor.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+
+  // InvestigationItem.vendorCode/vendorName are denormalized snapshots — keep
+  // the catalogue in sync whenever the vendor's code or name changes, so
+  // existing items don't keep showing a stale vendor. Saved Investigation
+  // requisitions (Investigation.vendor) are left untouched on purpose — those
+  // are historical records, same as other master-data renames in this app.
+  if (before && vendor && (vendor.code !== before.code || vendor.name !== before.name)) {
+    await InvestigationItem.updateMany(
+      { vendorCode: before.code },
+      { $set: { vendorCode: vendor.code, vendorName: vendor.name } }
+    );
+  }
+
+  return vendor;
 }
 
 export async function deleteVendor(id: string) {
@@ -583,6 +599,16 @@ export async function updateInvestigationItem(id: string, data: any) {
 
 export async function deleteInvestigationItem(id: string) {
   return InvestigationItem.findByIdAndDelete(id).lean();
+}
+
+export async function migrateInvestigationItemsVendor(ids: string[], vendorCode: string) {
+  const vendor = await InvestigationVendor.findOne({ code: vendorCode }).lean();
+  if (!vendor) throw new Error("Vendor not found");
+  const result = await InvestigationItem.updateMany(
+    { _id: { $in: ids } },
+    { $set: { vendorCode: vendor.code, vendorName: vendor.name } }
+  );
+  return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, vendor };
 }
 
 // ─── Bed Allotment ────────────────────────────────────────────────────────────
