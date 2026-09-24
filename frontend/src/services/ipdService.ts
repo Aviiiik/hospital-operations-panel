@@ -304,7 +304,7 @@ export const DIET_TYPES          = ["General", "Diabetic", "Low Salt", "Liquid",
 export const TREATMENT_CATEGORIES= ["General", "Surgical", "Maternity", "ICU", "Emergency", "Paediatric", "Gynaecology", "Orthopaedic"];
 export const PATIENT_CATEGORIES  = ["General", "TPA", "Cash", "Insurance", "Mediclaim", "ESI", "CGHS"];
 export const IPD_DEPARTMENTS     = ["OPD", "IPD", "DAYCARE", "MEDICINE", "SURGERY", "GYNAECOLOGY", "ORTHOPAEDIC", "PAEDIATRIC", "ICU", "DIALYSIS", "ENT", "OPHTHALMOLOGY", "DERMATOLOGY", "NEUROLOGY", "CARDIOLOGY", "UROLOGY", "MATERNITY"];
-export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred","Normal","DORB"];
+export const DISCHARGE_TYPES     = ["Recovered", "Referred", "LAMA", "Absconded", "Death", "Transferred","Normal","DORB"," Discharge On Request"];
 
 // Departments that never incur bed charges (patient isn't occupying an IPD bed)
 export const BED_CHARGE_EXEMPT_DEPARTMENTS = ["OPD", "DAYCARE"];
