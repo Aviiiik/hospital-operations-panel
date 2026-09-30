@@ -16,8 +16,22 @@ const requireAdmin = (req: any, res: any, next: any) => {
   }
 };
 
+// Dashboard stats need a logged-in user, and the Diagnostics role only ever
+// sees Diagnostics stats — never OPD figures.
+const requireNonDiagnostics = (req: any, res: any, next: any) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+  try {
+    const decoded: any = jwt.verify(auth.slice(7), process.env.JWT_SECRET || "fallback_secret");
+    if (decoded.role?.toLowerCase() === "diagnostics") return res.status(403).json({ message: "Access denied" });
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
 // GET bookings with patient and doctor info — defaults to today, accepts ?from&to
-router.get("/stats/today-activity", async (req, res) => {
+router.get("/stats/today-activity", requireNonDiagnostics, async (req, res) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
     const activity = await opdService.getTodayActivity(from, to);
@@ -28,7 +42,7 @@ router.get("/stats/today-activity", async (req, res) => {
 });
 
 // GET dashboard stats — OPD admissions and revenue for the range vs the preceding equal period
-router.get("/stats/dashboard", async (req, res) => {
+router.get("/stats/dashboard", requireNonDiagnostics, async (req, res) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
     const stats = await opdService.getDashboardStats(from, to);

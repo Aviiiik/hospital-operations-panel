@@ -107,6 +107,7 @@ export default function UsersList() {
       LabTech: "bg-cyan-100 text-cyan-700",
       Pharmacist: "bg-emerald-100 text-emerald-700",
       Accountant: "bg-amber-100 text-amber-700",
+      Diagnostics: "bg-teal-100 text-teal-700",
     };
     return colors[role] || "bg-gray-100 text-gray-700";
   };

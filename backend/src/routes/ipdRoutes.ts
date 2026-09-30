@@ -84,7 +84,7 @@ router.get("/patients", requireAdminOrReceptionist, async (req, res) => {
   }
 });
 
-router.get("/patients/:id", requireAdmin, async (req, res) => {
+router.get("/patients/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const patient = await ipdService.getIpdPatient(req.params.id);
     if (!patient) return res.status(404).json({ message: "Patient not found" });
@@ -94,7 +94,7 @@ router.get("/patients/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/patients/:id", requireAdmin, async (req, res) => {
+router.put("/patients/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const patient = await ipdService.updateIpdPatient(req.params.id, req.body);
     if (!patient) return res.status(404).json({ message: "Patient not found" });
@@ -105,7 +105,7 @@ router.put("/patients/:id", requireAdmin, async (req, res) => {
 });
 
 // Delete patient (and associated investigations/billing/bed allotments/receipts/pharmacy bills)
-router.delete("/patients/:id", requireAdmin, async (req, res) => {
+router.delete("/patients/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const patient = await ipdService.deleteIpdPatient(req.params.id);
     res.json({ success: true, data: patient });
@@ -146,7 +146,7 @@ router.get("/investigations/:id", requireAdminOrReceptionist, async (req, res) =
   }
 });
 
-router.put("/investigations/:id", requireAdmin, async (req, res) => {
+router.put("/investigations/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const inv = await ipdService.updateInvestigation(req.params.id, req.body);
     if (!inv) return res.status(404).json({ message: "Investigation not found" });
@@ -156,7 +156,7 @@ router.put("/investigations/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/investigations/:id", requireAdmin, async (req, res) => {
+router.delete("/investigations/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const inv = await ipdService.deleteInvestigation(req.params.id);
     if (!inv) return res.status(404).json({ message: "Investigation not found" });
@@ -168,7 +168,7 @@ router.delete("/investigations/:id", requireAdmin, async (req, res) => {
 
 // ─── Billing routes ───────────────────────────────────────────────────────────
 
-router.get("/billing/:patientId", requireAdmin, async (req, res) => {
+router.get("/billing/:patientId", requireAdminOrReceptionist, async (req, res) => {
   try {
     const entries = await ipdService.getBillingEntries(req.params.patientId);
     res.json({ success: true, data: { entries } });
@@ -177,7 +177,7 @@ router.get("/billing/:patientId", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/billing/:patientId", requireAdmin, async (req, res) => {
+router.post("/billing/:patientId", requireAdminOrReceptionist, async (req, res) => {
   try {
     const entry = await ipdService.createBillingEntry(req.params.patientId, req.body);
     res.status(201).json({ success: true, data: entry });
@@ -186,7 +186,7 @@ router.post("/billing/:patientId", requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/billing/entry/:id", requireAdmin, async (req, res) => {
+router.put("/billing/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const entry = await ipdService.updateBillingEntry(req.params.id, req.body);
     if (!entry) return res.status(404).json({ message: "Entry not found" });
@@ -196,7 +196,7 @@ router.put("/billing/entry/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/billing/entry/:id", requireAdmin, async (req, res) => {
+router.delete("/billing/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const entry = await ipdService.deleteBillingEntry(req.params.id);
     if (!entry) return res.status(404).json({ message: "Entry not found" });
@@ -207,7 +207,7 @@ router.delete("/billing/entry/:id", requireAdmin, async (req, res) => {
 });
 
 // Billing summary (gross / discount / net) — used by discharge page
-router.get("/billing/:patientId/summary", requireAdmin, async (req, res) => {
+router.get("/billing/:patientId/summary", requireAdminOrReceptionist, async (req, res) => {
   try {
     const summary = await ipdService.getBillingSummary(req.params.patientId);
     res.json({ success: true, data: summary });
@@ -323,7 +323,7 @@ router.post("/insurance-companies", requireAdminOrReceptionist, async (req, res)
   }
 });
 
-router.put("/insurance-companies/:id", requireAdmin, async (req, res) => {
+router.put("/insurance-companies/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const company = await ipdService.updateInsuranceCompany(req.params.id, req.body);
     if (!company) return res.status(404).json({ message: "Insurance company not found" });
@@ -333,7 +333,7 @@ router.put("/insurance-companies/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/insurance-companies/:id", requireAdmin, async (req, res) => {
+router.delete("/insurance-companies/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const company = await ipdService.deleteInsuranceCompany(req.params.id);
     if (!company) return res.status(404).json({ message: "Insurance company not found" });
@@ -364,7 +364,7 @@ router.post("/tpas", requireAdminOrReceptionist, async (req, res) => {
   }
 });
 
-router.put("/tpas/:id", requireAdmin, async (req, res) => {
+router.put("/tpas/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const tpa = await ipdService.updateTpa(req.params.id, req.body);
     if (!tpa) return res.status(404).json({ message: "TPA not found" });
@@ -374,7 +374,7 @@ router.put("/tpas/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/tpas/:id", requireAdmin, async (req, res) => {
+router.delete("/tpas/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const tpa = await ipdService.deleteTpa(req.params.id);
     if (!tpa) return res.status(404).json({ message: "TPA not found" });
@@ -458,7 +458,7 @@ router.get("/bed-allotments/:patientId/summary", requireAdminOrReceptionist, asy
   }
 });
 
-router.post("/bed-allotments/:patientId", requireAdmin, async (req, res) => {
+router.post("/bed-allotments/:patientId", requireAdminOrReceptionist, async (req, res) => {
   try {
     const allotment = await ipdService.createBedAllotment(req.params.patientId, req.body);
     res.status(201).json({ success: true, data: allotment });
@@ -468,7 +468,7 @@ router.post("/bed-allotments/:patientId", requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
+router.put("/bed-allotments/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const allotment = await ipdService.updateBedAllotment(req.params.id, req.body);
     if (!allotment) return res.status(404).json({ message: "Allotment not found" });
@@ -478,7 +478,7 @@ router.put("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
+router.delete("/bed-allotments/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const allotment = await ipdService.deleteBedAllotment(req.params.id);
     if (!allotment) return res.status(404).json({ message: "Allotment not found" });
@@ -490,7 +490,7 @@ router.delete("/bed-allotments/entry/:id", requireAdmin, async (req, res) => {
 
 // ─── Receipt routes ───────────────────────────────────────────────────────────
 
-router.get("/receipts/:patientId", requireAdmin, async (req, res) => {
+router.get("/receipts/:patientId", requireAdminOrReceptionist, async (req, res) => {
   try {
     const receipts = await ipdService.getReceipts(req.params.patientId);
     res.json({ success: true, data: { receipts } });
@@ -499,7 +499,7 @@ router.get("/receipts/:patientId", requireAdmin, async (req, res) => {
   }
 });
 
-router.get("/receipts/:patientId/summary", requireAdmin, async (req, res) => {
+router.get("/receipts/:patientId/summary", requireAdminOrReceptionist, async (req, res) => {
   try {
     const summary = await ipdService.getReceiptSummary(req.params.patientId);
     res.json({ success: true, data: summary });
@@ -508,7 +508,7 @@ router.get("/receipts/:patientId/summary", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/receipts/:patientId", requireAdmin, async (req, res) => {
+router.post("/receipts/:patientId", requireAdminOrReceptionist, async (req, res) => {
   try {
     const receipt = await ipdService.createReceipt(req.params.patientId, req.body);
     res.status(201).json({ success: true, data: receipt });
@@ -518,7 +518,7 @@ router.post("/receipts/:patientId", requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/receipts/entry/:id", requireAdmin, async (req, res) => {
+router.put("/receipts/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const receipt = await ipdService.updateReceipt(req.params.id, req.body);
     if (!receipt) return res.status(404).json({ message: "Receipt not found" });
@@ -528,7 +528,7 @@ router.put("/receipts/entry/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/receipts/entry/:id", requireAdmin, async (req, res) => {
+router.delete("/receipts/entry/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const receipt = await ipdService.deleteReceipt(req.params.id);
     if (!receipt) return res.status(404).json({ message: "Receipt not found" });
@@ -564,7 +564,7 @@ router.post("/pharmacy/:patientId", requireAdminOrReceptionist, async (req, res)
   }
 });
 
-router.put("/pharmacy/bill/:id", requireAdmin, async (req, res) => {
+router.put("/pharmacy/bill/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const bill = await ipdService.updatePharmacyBill(req.params.id, req.body);
     if (!bill) return res.status(404).json({ message: "Bill not found" });
@@ -572,7 +572,7 @@ router.put("/pharmacy/bill/:id", requireAdmin, async (req, res) => {
   } catch (err: any) { res.status(500).json({ message: err.message }); }
 });
 
-router.delete("/pharmacy/bill/:id", requireAdmin, async (req, res) => {
+router.delete("/pharmacy/bill/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
     const bill = await ipdService.deletePharmacyBill(req.params.id);
     if (!bill) return res.status(404).json({ message: "Bill not found" });

@@ -42,7 +42,8 @@ interface OccupiedBed {
 export default function IpdSearchPatient() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role.toLowerCase() === "admin";
+  const role = user?.role.toLowerCase();
+  const canManage = role === "admin" || role === "receptionist";
 
   const [search, setSearch]             = useState({ name: "", phone: "", admissionId: "" });
   const [preset, setPreset]             = useState<DatePreset | null>("today");
@@ -130,7 +131,7 @@ export default function IpdSearchPatient() {
   const handleBedClick = (cat: string, bed: string) => {
     const occ = occupiedBeds.find(b => b.bedCategory === cat && b.bedNo === bed);
     if (occ) {
-      if (isAdmin) navigate(`/ipd/edit/${occ._id}`);
+      if (canManage) navigate(`/ipd/edit/${occ._id}`);
       return;
     }
     // Available bed — filter search results by this bed
@@ -174,7 +175,7 @@ export default function IpdSearchPatient() {
             <CardTitle className="text-base">Bed Status</CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Occupied{isAdmin ? " — click to open patient" : ""}</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Occupied{canManage ? " — click to open patient" : ""}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-100 border border-green-300 inline-block" /> Available — click to filter</span>
               </div>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={fetchOccupiedBeds} disabled={loadingBeds}>
@@ -206,7 +207,7 @@ export default function IpdSearchPatient() {
                             ${isFiltered
                               ? "border-blue-500 ring-2 ring-blue-300 bg-blue-50 text-blue-700 cursor-pointer"
                               : isOccupied
-                                ? isAdmin
+                                ? canManage
                                   ? "bg-red-500 border-red-600 text-white hover:bg-red-600 cursor-pointer"
                                   : "bg-red-500 border-red-600 text-white cursor-default"
                                 : "bg-green-50 border-green-300 text-green-700 hover:bg-green-100 cursor-pointer"
@@ -355,8 +356,8 @@ export default function IpdSearchPatient() {
                   </thead>
                   <tbody>
                     {patients.map(p => (
-                      <tr key={p._id} className={`border-b hover:bg-gray-50 ${isAdmin ? "cursor-pointer" : ""}`}
-                        onClick={() => isAdmin && navigate(`/ipd/edit/${p._id}`)}>
+                      <tr key={p._id} className={`border-b hover:bg-gray-50 ${canManage ? "cursor-pointer" : ""}`}
+                        onClick={() => canManage && navigate(`/ipd/edit/${p._id}`)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-700">{p.admissionId}</td>
                         <td className="px-4 py-3 font-medium whitespace-nowrap">{p.title} {p.name}</td>
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{p.gender} / {p.ageYears}Y</td>
@@ -389,7 +390,7 @@ export default function IpdSearchPatient() {
                         </td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
-                            {isAdmin && (
+                            {canManage && (
                               <Button size="sm" variant="ghost"
                                 className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-700"
                                 onClick={() => navigate(`/ipd/edit/${p._id}`)}
@@ -397,7 +398,7 @@ export default function IpdSearchPatient() {
                                 <Pencil className="h-4 w-4" />
                               </Button>
                             )}
-                            {isAdmin && (
+                            {canManage && (
                               <Button size="sm" variant="ghost"
                                 className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-700"
                                 onClick={() => navigate(`/ipd/billing/${p._id}`)}
@@ -405,7 +406,7 @@ export default function IpdSearchPatient() {
                                 <IndianRupee className="h-4 w-4" />
                               </Button>
                             )}
-                            {isAdmin && (
+                            {canManage && (
                               <Button size="sm" variant="ghost"
                                 className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-700"
                                 onClick={() => setDeleteTarget(p)}

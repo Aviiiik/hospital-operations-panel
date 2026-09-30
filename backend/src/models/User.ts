@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema({
   mobile: { type: String, required: true, unique: true },
   role: { 
     type: String, 
-    enum: ["Admin", "Doctor", "Nurse", "Receptionist", "LabTech", "Pharmacist", "Accountant"],
+    enum: ["Admin", "Doctor", "Nurse", "Receptionist", "LabTech", "Pharmacist", "Accountant", "Diagnostics"],
     required: true 
   },
   department: { type: String },

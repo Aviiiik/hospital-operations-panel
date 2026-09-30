@@ -31,6 +31,10 @@ import IpdPharmacy            from "./pages/ipd/IpdPharmacy";
 import InvestigationVendors   from "./pages/ipd/InvestigationVendors";
 import InvestigationItems     from "./pages/ipd/InvestigationItems";
 import ServiceCatalogueManager from "./pages/ipd/ServiceCatalogueManager";
+import DiagnosticsNewPatient    from "./pages/diagnostics/DiagnosticsNewPatient";
+import DiagnosticsSearchPatient from "./pages/diagnostics/DiagnosticsSearchPatient";
+import DiagnosticsEditPatient   from "./pages/diagnostics/DiagnosticsEditPatient";
+import DiagnosticTests          from "./pages/diagnostics/DiagnosticTests";
 import Pharmacy         from "./pages/pharmacy/Pharmacy";
 import Operations       from "./pages/operations/Operations";
 
@@ -48,6 +52,10 @@ const RoleRoute = ({ children, allowed }: { children: React.ReactNode; allowed: 
 
 const OpdGuard = ({ children }: { children: React.ReactNode }) => (
   <RoleRoute allowed={["admin", "receptionist"]}>{children}</RoleRoute>
+);
+
+const DiagnosticsGuard = ({ children }: { children: React.ReactNode }) => (
+  <RoleRoute allowed={["admin", "diagnostics"]}>{children}</RoleRoute>
 );
 
 const DoctorGuard = ({ children }: { children: React.ReactNode }) => (
@@ -84,17 +92,24 @@ function App() {
             <Route path="ipd" element={<RoleRoute allowed={["admin","receptionist"]}><IpdList /></RoleRoute>} />
             <Route path="ipd/new-patient"       element={<RoleRoute allowed={["admin","receptionist"]}><IpdNewPatient /></RoleRoute>} />
             <Route path="ipd/search"            element={<RoleRoute allowed={["admin","receptionist"]}><IpdSearchPatient /></RoleRoute>} />
-            <Route path="ipd/edit/:id"          element={<RoleRoute allowed={["admin"]}><IpdEditPatient /></RoleRoute>} />
+            <Route path="ipd/edit/:id"          element={<RoleRoute allowed={["admin","receptionist"]}><IpdEditPatient /></RoleRoute>} />
             <Route path="ipd/investigation/:id" element={<RoleRoute allowed={["admin","receptionist"]}><IpdInvestigation /></RoleRoute>} />
             <Route path="ipd/discharge/:id"     element={<RoleRoute allowed={["admin"]}><IpdDischarge /></RoleRoute>} />
-            <Route path="ipd/services/:id"      element={<RoleRoute allowed={["admin"]}><IpdServices /></RoleRoute>} />
-            <Route path="ipd/billing/:id"       element={<RoleRoute allowed={["admin"]}><IpdBilling /></RoleRoute>} />
-            <Route path="ipd/bed-allotment/:id" element={<RoleRoute allowed={["admin"]}><IpdBedAllotment /></RoleRoute>} />
-            <Route path="ipd/receipt/:id"       element={<RoleRoute allowed={["admin"]}><IpdReceipt /></RoleRoute>} />
-            <Route path="ipd/pharmacy/:id"      element={<RoleRoute allowed={["admin"]}><IpdPharmacy /></RoleRoute>} />
+            <Route path="ipd/services/:id"      element={<RoleRoute allowed={["admin","receptionist"]}><IpdServices /></RoleRoute>} />
+            <Route path="ipd/billing/:id"       element={<RoleRoute allowed={["admin","receptionist"]}><IpdBilling /></RoleRoute>} />
+            <Route path="ipd/bed-allotment/:id" element={<RoleRoute allowed={["admin","receptionist"]}><IpdBedAllotment /></RoleRoute>} />
+            <Route path="ipd/receipt/:id"       element={<RoleRoute allowed={["admin","receptionist"]}><IpdReceipt /></RoleRoute>} />
+            <Route path="ipd/pharmacy/:id"      element={<RoleRoute allowed={["admin","receptionist"]}><IpdPharmacy /></RoleRoute>} />
             <Route path="ipd/vendors"           element={<RoleRoute allowed={["admin"]}><InvestigationVendors /></RoleRoute>} />
             <Route path="ipd/investigation-items" element={<RoleRoute allowed={["admin"]}><InvestigationItems /></RoleRoute>} />
             <Route path="ipd/service-catalogue" element={<RoleRoute allowed={["admin"]}><ServiceCatalogueManager /></RoleRoute>} />
+
+            {/* Diagnostics */}
+            <Route path="diagnostics" element={<Navigate to="/diagnostics/new-patient" replace />} />
+            <Route path="diagnostics/new-patient"     element={<DiagnosticsGuard><DiagnosticsNewPatient /></DiagnosticsGuard>} />
+            <Route path="diagnostics/search"          element={<DiagnosticsGuard><DiagnosticsSearchPatient /></DiagnosticsGuard>} />
+            <Route path="diagnostics/edit/:id"        element={<DiagnosticsGuard><DiagnosticsEditPatient /></DiagnosticsGuard>} />
+            <Route path="diagnostics/tests"           element={<DiagnosticsGuard><DiagnosticTests /></DiagnosticsGuard>} />
 
             {/* Pharmacy */}
             <Route path="pharmacy" element={<RoleRoute allowed={["admin","pharmacist","doctor","nurse"]}><Pharmacy /></RoleRoute>} />
