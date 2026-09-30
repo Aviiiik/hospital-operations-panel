@@ -8,57 +8,87 @@ export type DatePreset =
 
 export interface CustomRange { from: string; to: string; } // yyyy-mm-dd
 
+// All bounds are built as explicit IST (+05:30) instants, not the browser's
+// local timezone — so "Today"/"Custom Range"/etc. mean the IST calendar day
+// regardless of what timezone the machine running the browser is set to.
+const IST_OFFSET = "+05:30";
+
+// Today's date as YYYY-MM-DD in IST, independent of the browser's local timezone.
+function todayISTStr(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+// Shifts an IST YYYY-MM-DD date string by `days` (may be negative), returning
+// another YYYY-MM-DD string, all reckoned in IST.
+function shiftISTDateStr(dateStr: string, days: number): string {
+  // Anchor at IST noon so a +/- day shift never crosses into the previous/next
+  // UTC calendar day and throws off the IST-day math.
+  const d = new Date(`${dateStr}T12:00:00${IST_OFFSET}`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+// Shifts an IST YYYY-MM-DD date string back by `months` calendar months,
+// clamping the day-of-month into the target month (JS Date's native rollover
+// behavior, e.g. Mar 31 - 1 month -> Mar 3, matches what setMonth did before).
+function shiftISTMonthsStr(dateStr: string, months: number): string {
+  const [y, m, day] = dateStr.split("-").map(Number);
+  const d = new Date(`${dateStr}T12:00:00${IST_OFFSET}`);
+  d.setUTCFullYear(y, m - 1 - months, day);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function istDayStart(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00.000${IST_OFFSET}`);
+}
+function istDayEnd(dateStr: string): Date {
+  return new Date(`${dateStr}T23:59:59.999${IST_OFFSET}`);
+}
+
 export function getDateRange(preset: DatePreset, custom?: CustomRange): { from: Date; to: Date } {
-  const now = new Date();
+  const todayStr = todayISTStr();
 
   if (preset === "custom") {
-    const from = custom?.from ? new Date(`${custom.from}T00:00:00`) : new Date(new Date().setHours(0, 0, 0, 0));
-    const to   = custom?.to   ? new Date(`${custom.to}T23:59:59.999`) : new Date(new Date().setHours(23, 59, 59, 999));
+    const from = custom?.from ? istDayStart(custom.from) : istDayStart(todayStr);
+    const to   = custom?.to   ? istDayEnd(custom.to)     : istDayEnd(todayStr);
     return { from, to };
   }
 
   switch (preset) {
     case "today": {
-      const from = new Date(now); from.setHours(0, 0, 0, 0);
-      const to   = new Date(now); to.setHours(23, 59, 59, 999);
-      return { from, to };
+      return { from: istDayStart(todayStr), to: istDayEnd(todayStr) };
     }
     case "yesterday": {
-      const from = new Date(now); from.setDate(from.getDate() - 1); from.setHours(0, 0, 0, 0);
-      const to   = new Date(now); to.setDate(to.getDate() - 1);     to.setHours(23, 59, 59, 999);
-      return { from, to };
+      const yStr = shiftISTDateStr(todayStr, -1);
+      return { from: istDayStart(yStr), to: istDayEnd(yStr) };
     }
     case "this_week": {
-      const from = new Date(now);
-      const day = from.getDay();
-      from.setDate(from.getDate() - (day === 0 ? 6 : day - 1));
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(now); to.setHours(23, 59, 59, 999);
-      return { from, to };
+      const day = istDayStart(todayStr).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", weekday: "short" });
+      const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(day);
+      const back = dayIdx === 0 ? 6 : dayIdx - 1; // days since Monday
+      const fromStr = shiftISTDateStr(todayStr, -back);
+      return { from: istDayStart(fromStr), to: istDayEnd(todayStr) };
     }
     case "this_month": {
-      const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      const to   = new Date(now); to.setHours(23, 59, 59, 999);
-      return { from, to };
+      const [y, m] = todayStr.split("-");
+      const fromStr = `${y}-${m}-01`;
+      return { from: istDayStart(fromStr), to: istDayEnd(todayStr) };
     }
     case "last_month": {
-      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-      const to   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-      return { from, to };
+      const [y, m] = todayStr.split("-").map(Number);
+      // First of this month, shifted back one day, lands in last month.
+      const lastDayOfPrevMonth = shiftISTDateStr(`${y}-${String(m).padStart(2, "0")}-01`, -1);
+      const [py, pm] = lastDayOfPrevMonth.split("-");
+      const fromStr = `${py}-${pm}-01`;
+      return { from: istDayStart(fromStr), to: istDayEnd(lastDayOfPrevMonth) };
     }
     case "last_3_months": {
-      const from = new Date(now);
-      from.setMonth(from.getMonth() - 3);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(now); to.setHours(23, 59, 59, 999);
-      return { from, to };
+      const fromStr = shiftISTMonthsStr(todayStr, 3);
+      return { from: istDayStart(fromStr), to: istDayEnd(todayStr) };
     }
     case "last_6_months": {
-      const from = new Date(now);
-      from.setMonth(from.getMonth() - 6);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(now); to.setHours(23, 59, 59, 999);
-      return { from, to };
+      const fromStr = shiftISTMonthsStr(todayStr, 6);
+      return { from: istDayStart(fromStr), to: istDayEnd(todayStr) };
     }
   }
 }

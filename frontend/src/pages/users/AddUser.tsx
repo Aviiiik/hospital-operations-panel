@@ -29,8 +29,8 @@ export default function AddUser() {
     consultancyFees: "",
   });
 
-  const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant"];
-  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE","Administration", "Pharmacy","Reception"];
+  const roles = ["Doctor", "Nurse", "Admin", "Receptionist", "LabTech", "Pharmacist", "Accountant", "Diagnostics"];
+  const departments = ["OPD", "DIALYSIS", "EMERGENCY", "IMPLANT", "PROCEDURE","Administration", "Pharmacy","Reception","Diagnostics"];
 
   const shifts = ["Morning", "Evening", "Night", "General Shift"];
 

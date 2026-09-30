@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee } from "lucide-react";
+import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee, Receipt, BadgePercent, Microscope } from "lucide-react";
 import opdService from "@/services/opdService";
 import ipdService from "@/services/ipdService";
+import diagnosticsService, { type DiagnosticsDashboardStats } from "@/services/diagnosticsService";
+import { useAuth } from "@/contexts/AuthContext";
 import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
 
 interface OpdStats {
@@ -97,6 +99,12 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const role = user?.role.toLowerCase() ?? "";
+  // Diagnostics users see only Diagnostics stats — never OPD/IPD (the OPD stats
+  // API also refuses them). Admin sees everything; other roles are unchanged.
+  const showOpdIpd       = role !== "diagnostics";
+  const showDiagnostics  = role === "admin" || role === "diagnostics";
 
   const [preset, setPreset] = useState<DatePreset>("today");
   const initialRange = getDateRange("today");
@@ -111,6 +119,8 @@ export default function Dashboard() {
   const [opdLoading, setOpdLoading] = useState(true);
   const [ipdLoading, setIpdLoading] = useState(true);
   const [actLoading, setActLoading] = useState(true);
+  const [diagStats,   setDiagStats]   = useState<DiagnosticsDashboardStats | null>(null);
+  const [diagLoading, setDiagLoading] = useState(true);
 
   const handleRangeChange = (p: DatePreset, r: { from: Date; to: Date }) => {
     setPreset(p);
@@ -118,6 +128,14 @@ export default function Dashboard() {
   };
 
   const loadAll = (from: string, to: string) => {
+    if (showDiagnostics) {
+      diagnosticsService.getDashboardStats(from, to)
+        .then(r => setDiagStats(r.data.data))
+        .catch(() => {})
+        .finally(() => setDiagLoading(false));
+    }
+    if (!showOpdIpd) return;
+
     opdService.getDashboardStats(from, to)
       .then(r => setOpdStats(r.data.data))
       .catch(() => {})
@@ -146,7 +164,7 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Hospital Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{showOpdIpd ? "Hospital Dashboard" : "Diagnostics Dashboard"}</h1>
           <p className="text-gray-500 mt-1">Overview for the selected period</p>
         </div>
         <div>
@@ -155,6 +173,11 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {showDiagnostics && !showOpdIpd && (
+        <DiagnosticsSection stats={diagStats} loading={diagLoading} periodLabel={PRESET_LABELS[preset]} />
+      )}
+
+      {showOpdIpd && (<>
       {/* ── OPD Stats ───────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">OPD</h2>
@@ -386,6 +409,197 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </section>
+      </>)}
+
+      {showDiagnostics && showOpdIpd && (
+        <DiagnosticsSection stats={diagStats} loading={diagLoading} periodLabel={PRESET_LABELS[preset]} />
+      )}
     </div>
+  );
+}
+
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+// Bills are counted by bill date. Department / top-test amounts are gross test
+// rates (before the bill discount); Revenue is the net billed amount.
+function DiagnosticsSection({ stats, loading, periodLabel }: {
+  stats: DiagnosticsDashboardStats | null;
+  loading: boolean;
+  periodLabel: string;
+}) {
+  const navigate = useNavigate();
+  const bills   = stats?.patients.current ?? 0;
+  const revenue = stats?.revenue.current ?? 0;
+  const avgBill = bills ? Math.round(revenue / bills) : 0;
+  const maxDept = Math.max(1, ...(stats?.byDepartment ?? []).map(d => d.amount));
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">Diagnostics</h2>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <Card className="border-blue-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Patients / Bills ({periodLabel})</CardTitle>
+            <Receipt className="h-5 w-5 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-700">{loading ? "—" : bills}</div>
+            {stats && <TrendBadge current={stats.patients.current} previous={stats.patients.previous} />}
+            {!stats && !loading && <p className="text-xs mt-1 text-gray-400">Could not load</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Revenue ({periodLabel})</CardTitle>
+            <IndianRupee className="h-5 w-5 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-emerald-700">{loading ? "—" : formatRevenue(revenue)}</div>
+            {stats && <TrendBadge current={stats.revenue.current} previous={stats.revenue.previous} />}
+            {stats && <p className="text-xs text-gray-400 mt-0.5">Previous period: {formatRevenue(stats.revenue.previous)}</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="border-purple-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Average Bill</CardTitle>
+            <Microscope className="h-5 w-5 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-700">{loading ? "—" : formatRevenue(avgBill)}</div>
+            <p className="text-xs text-gray-500 mt-1">Net amount per bill</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Discount Given</CardTitle>
+            <BadgePercent className="h-5 w-5 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-orange-600">{loading ? "—" : formatRevenue(stats?.discount ?? 0)}</div>
+            <p className="text-xs text-gray-500 mt-1">Total bill discounts</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* By department + payment mode */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">By Department</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {loading ? (
+              <p className="text-gray-400 text-sm text-center py-4">Loading…</p>
+            ) : !stats?.byDepartment.length ? (
+              <p className="text-gray-500 text-sm text-center py-4">No tests billed in this period</p>
+            ) : (
+              stats.byDepartment.map(d => (
+                <div key={d.department}>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-800">{d.department}</span>
+                    <span className="tabular-nums text-gray-900">{formatRevenue(d.amount)}</span>
+                  </div>
+                  <div className="h-2 rounded bg-gray-100 mt-1 overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded" style={{ width: `${(d.amount / maxDept) * 100}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{d.tests} test{d.tests !== 1 ? "s" : ""}</p>
+                </div>
+              ))
+            )}
+            {!!stats?.byPaymentMode.length && (
+              <div className="pt-3 border-t">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Payment Mode</p>
+                {stats.byPaymentMode.map(m => (
+                  <div key={m.paymentMode} className="flex justify-between text-sm py-0.5">
+                    <span className="text-gray-700">{m.paymentMode} <span className="text-xs text-gray-400">({m.count})</span></span>
+                    <span className="tabular-nums">{formatRevenue(m.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top tests */}
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="text-base">Top Tests ({periodLabel})</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <p className="text-gray-400 text-center py-8 text-sm">Loading…</p>
+            ) : !stats?.topTests.length ? (
+              <p className="text-gray-500 text-center py-8 text-sm">No tests billed in this period</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                      <th className="text-left px-4 py-3 font-medium">Test</th>
+                      <th className="text-left px-4 py-3 font-medium">Department</th>
+                      <th className="text-right px-4 py-3 font-medium">Count</th>
+                      <th className="text-right px-4 py-3 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.topTests.map(t => (
+                      <tr key={t.testName}>
+                        <td className="px-4 py-2.5 font-medium text-gray-900">{t.testName}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{t.department || "—"}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{t.count}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{formatRevenue(t.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bills in period */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Diagnostics Bills ({periodLabel})</CardTitle>
+          <button onClick={() => navigate("/diagnostics/search")} className="text-xs text-blue-600 hover:underline">
+            View all →
+          </button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <p className="text-gray-400 text-center py-8 text-sm">Loading…</p>
+          ) : !stats?.recentBills.length ? (
+            <p className="text-gray-500 text-center py-8 text-sm">No diagnostics bills in this period</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                    <th className="text-left px-4 py-3 font-medium">Bill No</th>
+                    <th className="text-left px-4 py-3 font-medium">Patient</th>
+                    <th className="text-left px-4 py-3 font-medium">Tests</th>
+                    <th className="text-left px-4 py-3 font-medium">Bill Date</th>
+                    <th className="text-left px-4 py-3 font-medium">Mode</th>
+                    <th className="text-right px-4 py-3 font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {stats.recentBills.map(b => (
+                    <tr key={b._id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate(`/diagnostics/edit/${b._id}`)}>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{b.billNo}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{b.title} {b.name}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{(b.tests || []).map(t => t.testName).join(", ")}</td>
+                      <td className="px-4 py-3 text-gray-500 tabular-nums">{formatDate(b.billDate)}</td>
+                      <td className="px-4 py-3 text-gray-500">{b.paymentMode}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900 tabular-nums">{formatRevenue(b.billAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
   );
 }
