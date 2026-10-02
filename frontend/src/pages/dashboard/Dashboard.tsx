@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee, Receipt, BadgePercent, Microscope } from "lucide-react";
+import { Users, Calendar, TrendingUp, TrendingDown, Minus, BedDouble, LogIn, LogOut, BedSingle, IndianRupee, Receipt, BadgePercent, Microscope, Gauge } from "lucide-react";
 import opdService from "@/services/opdService";
-import ipdService from "@/services/ipdService";
+import ipdService, { BED_CATEGORIES } from "@/services/ipdService";
 import diagnosticsService, { type DiagnosticsDashboardStats } from "@/services/diagnosticsService";
 import { useAuth } from "@/contexts/AuthContext";
 import DatePresetFilter, { type DatePreset, getDateRange } from "@/components/DatePresetFilter";
@@ -18,6 +18,7 @@ interface IpdStats {
   admittedInRange:    number;
   dischargedInRange:  number;
   bedsOccupied:       number;
+  avgBedsOccupiedInRange: number;
   revenueInRange:     number;
   recentAdmissions:   RecentAdmission[];
 }
@@ -58,6 +59,16 @@ function pctChange(current: number, previous: number) {
 }
 
 function formatRevenue(n: number) { return `₹${n.toLocaleString("en-IN")}`; }
+
+// Total bed capacity = every bed listed in the IPD bed master.
+const TOTAL_BEDS = BED_CATEGORIES.reduce((s, c) => s + c.beds.length, 0);
+
+// Bar colour escalates as the ward fills up.
+function occupancyBarColor(pct: number) {
+  if (pct >= 90) return "bg-red-500";
+  if (pct >= 75) return "bg-amber-500";
+  return "bg-indigo-500";
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
@@ -224,7 +235,7 @@ export default function Dashboard() {
       {/* ── IPD Stats ───────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">IPD</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
           <Card className="border-green-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Currently Admitted</CardTitle>
@@ -277,13 +288,39 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
+          <Card className="border-indigo-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Occupancy Rate ({PRESET_LABELS[preset]})</CardTitle>
+              <Gauge className="h-5 w-5 text-indigo-600" />
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Time-weighted average beds in use over the period (up to now).
+                const avg = ipdStats?.avgBedsOccupiedInRange ?? 0;
+                const pct = TOTAL_BEDS ? Math.min(100, Math.round((avg / TOTAL_BEDS) * 100)) : 0;
+                return (<>
+                  <div className="text-3xl font-bold text-indigo-700">{ipdLoading ? "—" : `${pct}%`}</div>
+                  <div className="h-2 rounded bg-gray-100 mt-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded transition-all ${occupancyBarColor(pct)}`}
+                      style={{ width: `${ipdLoading ? 0 : pct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {ipdLoading ? "Average beds in use" : `Avg. ${Math.round(Math.round(avg * 10) / 10)} of ${TOTAL_BEDS} beds in use`}
+                  </p>
+                </>);
+              })()}
+            </CardContent>
+          </Card>
+
           <Card className="border-emerald-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Revenue ({PRESET_LABELS[preset]})</CardTitle>
               <IndianRupee className="h-5 w-5 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-emerald-700">
+              <div className="text-3xl font-bold text-emerald-700 tabular-nums wrap-break-word">
                 {ipdLoading ? "—" : formatRevenue(ipdStats?.revenueInRange ?? 0)}
               </div>
               <p className="text-xs text-gray-500 mt-1">Receipts collected + due at discharge</p>
