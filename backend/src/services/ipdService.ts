@@ -415,6 +415,51 @@ async function computeNetDueForPatient(patient: any): Promise<number> {
   return Math.max(0, grandTotal - receiptSummary.totalReceived - receiptSummary.totalTds - receiptSummary.totalDisallowed);
 }
 
+// Time-weighted average number of beds occupied over [rangeStart, rangeEnd]
+// (the part of the range that's in the future is ignored). Each bed allotment
+// counts from its allotment date+time until its end date+time — or, for the
+// still-open allotment, until the patient's discharge (discharge doesn't close
+// the allotment row) or now if they're still admitted.
+async function computeAvgBedsOccupied(rangeStart: Date, rangeEnd: Date): Promise<number> {
+  const windowStart = rangeStart.getTime();
+  const windowEnd   = Math.min(rangeEnd.getTime(), Date.now());
+  if (windowEnd <= windowStart) return 0;
+
+  // Coarse date filter (dates are stored at day granularity) — exact overlap is clipped below.
+  const dayMs = 24 * 3600000;
+  const allotments = await IpdBedAllotment.find({
+    allotmentDate: { $lte: new Date(windowEnd + dayMs) },
+    $or: [{ endDate: { $exists: false } }, { endDate: null }, { endDate: { $gte: new Date(windowStart - dayMs) } }],
+  }).select("patientId allotmentDate allotmentTime endDate endTime").lean() as any[];
+  if (!allotments.length) return 0;
+
+  const patients = await IpdPatient.find(
+    { _id: { $in: allotments.map(a => a.patientId) } },
+    { status: 1, dischargeDate: 1, dischargeTime: 1 }
+  ).lean() as any[];
+  const patientById = new Map(patients.map(p => [String(p._id), p]));
+
+  let occupiedMs = 0;
+  for (const a of allotments) {
+    // Orphaned allotments (patient since deleted) are often still open and
+    // would otherwise count as an occupied bed forever.
+    const p = patientById.get(String(a.patientId));
+    if (!p) continue;
+    const start = combineISTDateTime(a.allotmentDate, a.allotmentTime).getTime();
+    let end: number;
+    if (a.endDate) {
+      end = combineISTDateTime(a.endDate, a.endTime).getTime();
+    } else {
+      end = p.status === "Discharged" && p.dischargeDate
+        ? combineISTDateTime(p.dischargeDate, p.dischargeTime).getTime()
+        : Date.now();
+    }
+    const overlap = Math.min(end, windowEnd) - Math.max(start, windowStart);
+    if (overlap > 0) occupiedMs += overlap;
+  }
+  return occupiedMs / (windowEnd - windowStart);
+}
+
 export async function getIpdDashboardStats(fromQ?: string, toQ?: string) {
   // IST calendar-day boundary, computed independent of the server's local timezone.
   const istDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
@@ -423,7 +468,7 @@ export async function getIpdDashboardStats(fromQ?: string, toQ?: string) {
   const rangeStart = fromQ ? new Date(fromQ) : defaultStart;
   const rangeEnd   = toQ   ? new Date(toQ)   : defaultEnd;
 
-  const [currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, recentRaw, dischargedInRangePatients, receiptsAgg] =
+  const [currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, recentRaw, dischargedInRangePatients, receiptsAgg, avgBedsOccupiedInRange] =
     await Promise.all([
       // Snapshot metrics — always "right now", independent of the selected range.
       IpdPatient.countDocuments({ status: "Admitted" }),
@@ -443,6 +488,7 @@ export async function getIpdDashboardStats(fromQ?: string, toQ?: string) {
         { $match: { receiptDate: { $gte: rangeStart, $lte: rangeEnd } } },
         { $group: { _id: null, total: { $sum: "$receiptAmount" } } },
       ]),
+      computeAvgBedsOccupied(rangeStart, rangeEnd),
     ]);
 
   // Revenue = receipts collected in range + the final due amount left on bills
@@ -463,7 +509,7 @@ export async function getIpdDashboardStats(fromQ?: string, toQ?: string) {
     status:        p.status,
   }));
 
-  return { currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, recentAdmissions, revenueInRange };
+  return { currentlyAdmitted, admittedInRange, dischargedInRange, bedsOccupied, avgBedsOccupiedInRange, recentAdmissions, revenueInRange };
 }
 
 // ─── Investigation Vendors ────────────────────────────────────────────────────

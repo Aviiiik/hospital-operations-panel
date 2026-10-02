@@ -1,4 +1,3 @@
-import logoUrl from "@/assets/logo.png";
 import {
   PRINT_BASE_CSS, wrapPrintDoc, chunkTableSections, amountInWordsHtml, printViaHiddenIframe,
 } from "@/lib/ipdPrint";
@@ -8,12 +7,12 @@ import type { DiagnosticPatient } from "@/services/diagnosticsService";
 // header via wrapPrintDoc's <thead>, chunked item table, hidden-iframe
 // printing) so it paginates the same way and never uses window.open.
 //
-// The repeating header block below is deliberately styled like IPD's
-// patientHeaderHtml() in ipdPrint.ts (same .php-hosp/.php-title/.php-grid
-// classes from PATIENT_HEADER_CSS, part of PRINT_BASE_CSS) — hospital identity
-// box, underlined doc title, then a two-column patient-details grid — just
-// with diagnostics fields (Bill No in place of Admission/Invoice No, no
-// admission/bed/doctor rows) instead of IPD's admission-specific ones.
+// The repeating header block below is styled like IPD's patientHeaderHtml() in
+// ipdPrint.ts (same .php-title/.php-grid classes from PATIENT_HEADER_CSS, part
+// of PRINT_BASE_CSS) — underlined doc title, then a two-column patient-details
+// grid — with diagnostics fields (Bill No in place of Admission/Invoice No, no
+// admission/bed/doctor rows). Unlike IPD it has no hospital identity box: it
+// prints on pre-printed letterhead (see DX_LETTERHEAD_CSS).
 
 function esc(v: unknown): string {
   return String(v ?? "")
@@ -25,6 +24,20 @@ const money = (n: number) => Number(n || 0).toFixed(2);
 const dateIST = (d: string | Date) =>
   new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
+// Pre-printed letterhead clearance, measured off the hospital's diagnostic
+// stationery: the printed header (logo/name/unit line + red rule) ends ~36mm
+// from the top edge and the old bill's patient details start ~40mm down; the
+// printed address strip (red rule + address/phone) occupies the bottom ~22mm.
+// The header rides in wrapPrintDoc's repeating <thead>, so its top padding
+// clears the letterhead on every page; the <tfoot> spacer clears the footer.
+const DX_LETTERHEAD_CSS = `
+  @media print {
+    .print-patient-header.dx-letterhead { height: auto; overflow: visible; padding: 37mm 0 0; }
+    .dx-letterhead .php-title { margin-top: 0; }
+    .doc-grid .foot-space { height: 30mm; }
+  }
+`;
+
 function billHeaderHtml(patient: DiagnosticPatient): string {
   const age = [
     patient.ageYears  ? `${patient.ageYears}Y`  : "",
@@ -35,20 +48,12 @@ function billHeaderHtml(patient: DiagnosticPatient): string {
   const row = (k: string, v: string, wide = false) =>
     `<div class="row${wide ? " wide" : ""}"><span class="k">${k}</span><span class="v${wide ? " wrap" : ""}">${v}</span></div>`;
 
+  // No hospital identity box — the diagnostics bill is printed on pre-printed
+  // letterhead (logo + name + "A unit of…" + rule across the top, address strip
+  // across the bottom). DX_LETTERHEAD_CSS reserves that space instead.
   return `
-<div class="print-patient-header">
-  <div class="php-hosp">
-    <div class="logo-cell"><img src="${logoUrl}" alt="Logo"/></div>
-    <div class="hosp-cell">
-      <div class="h-name">AROGYA MATERNITY &amp; NURSING HOME</div>
-      <div class="h-line">(A Unit of R.P. Medical Foundation Pvt. Ltd.)</div>
-      <div class="h-line">(Licence Under W.B. Clinical Establishment Act)</div>
-      <div class="h-reg">Regd. No: 34257492</div>
-      <div class="h-line">71, Tollygunge Circular Road, Kolkata-700053 (New Alipore, Sital Sadan Compound)</div>
-      <div class="h-line">Phone: (033) 2400-0681 / 0684 &nbsp;|&nbsp; Fax: (033) 2400-1180</div>
-    </div>
-  </div>
-  <div class="php-title">Diagnostics Bill</div>
+<div class="print-patient-header dx-letterhead">
+  <div class="php-title">Money Receipt / Bill</div>
   <div class="php-grid">
     <div>
       ${row("Bill No", `<b>${esc(patient.billNo)}</b>`)}
@@ -90,6 +95,7 @@ ${amountInWordsHtml(patient.billAmount, "Net Bill Amount")}
 ${patient.billRemarks ? `<p style="margin-top:8px;font-size:11px"><b>Remarks:</b> ${esc(patient.billRemarks)}</p>` : ""}
 <div class="signatures"><div></div><div class="sig-line">Authorised Signatory</div></div>`;
 
-  const body = wrapPrintDoc(billHeaderHtml(patient), [...testSections, totals]);
-  printViaHiddenIframe(`Diagnostics Bill ${patient.billNo}`, PRINT_BASE_CSS, body);
+  // No footer text — it would print over the letterhead's pre-printed address strip.
+  const body = wrapPrintDoc(billHeaderHtml(patient), [...testSections, totals], "");
+  printViaHiddenIframe(`Diagnostics Bill ${patient.billNo}`, PRINT_BASE_CSS + DX_LETTERHEAD_CSS, body);
 }
