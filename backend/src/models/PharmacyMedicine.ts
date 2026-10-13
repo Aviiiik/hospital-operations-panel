@@ -10,4 +10,6 @@ const pharmacyMedicineSchema = new mongoose.Schema({
   isActive:     { type: Boolean, default: true },
 }, { timestamps: true });
 
+pharmacyMedicineSchema.index({ isActive: 1, termName: 1 });
+
 export default mongoose.model("PharmacyMedicine", pharmacyMedicineSchema);

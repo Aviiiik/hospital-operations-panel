@@ -104,6 +104,17 @@ router.put("/patients/:id", requireAdminOrReceptionist, async (req, res) => {
   }
 });
 
+// Reverse a discharge — back to Admitted, last bed allotment reopened
+router.post("/patients/:id/reverse-discharge", requireAdminOrReceptionist, async (req, res) => {
+  try {
+    const patient = await ipdService.reverseDischarge(req.params.id);
+    res.json({ success: true, data: patient });
+  } catch (err: any) {
+    const status = err.message === "Patient not found" ? 404 : 400;
+    res.status(status).json({ message: err.message });
+  }
+});
+
 // Delete patient (and associated investigations/billing/bed allotments/receipts/pharmacy bills)
 router.delete("/patients/:id", requireAdminOrReceptionist, async (req, res) => {
   try {
@@ -585,7 +596,9 @@ router.delete("/pharmacy/bill/:id", requireAdminOrReceptionist, async (req, res)
 router.get("/pharmacy-medicines", requireAdminOrReceptionist, async (req, res) => {
   try {
     const activeOnly = req.query.all !== "1";
-    const medicines = await ipdService.getMedicines(activeOnly);
+    const search = typeof req.query.q === "string" ? req.query.q : "";
+    const limit  = Math.min(Math.max(parseInt(String(req.query.limit || "0"), 10) || 0, 0), 200);
+    const medicines = await ipdService.getMedicines(activeOnly, search, limit);
     res.json({ success: true, data: { medicines } });
   } catch (err: any) { res.status(500).json({ message: err.message }); }
 });

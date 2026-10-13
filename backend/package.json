@@ -18,7 +18,8 @@
     "seed:insurance-tpa": "tsx src/scripts/seedInsuranceTpa.ts",
     "seed:diagnostic-tests": "tsx src/scripts/seedDiagnosticTests.ts",
     "update:arogya-vendor": "tsx src/scripts/updateArogyaVendorName.ts",
-    "update:requires-doctor-flags": "tsx src/scripts/fixRequiresDoctorFlags.ts"
+    "update:requires-doctor-flags": "tsx src/scripts/fixRequiresDoctorFlags.ts",
+    "reverse:discharge": "tsx src/scripts/reverseDischarge.ts"
   },
   "keywords": [],
   "author": "",

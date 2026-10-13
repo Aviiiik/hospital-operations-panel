@@ -32,4 +32,6 @@ const ipdPharmacyBillSchema = new mongoose.Schema({
   netAmount:    { type: Number, default: 0 },
 }, { timestamps: true });
 
+ipdPharmacyBillSchema.index({ patientId: 1, billDate: -1 });
+
 export default mongoose.model("IpdPharmacyBill", ipdPharmacyBillSchema);

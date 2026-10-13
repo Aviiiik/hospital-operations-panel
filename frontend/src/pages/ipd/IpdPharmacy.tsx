@@ -211,18 +211,31 @@ function printAllPharmacyBills(patient: any, bills: PharmBill[], logo: string) {
 
 // ─── Medicine dropdown with search ───────────────────────────────────────────
 
+// The catalogue is ~15k medicines, so it's searched server-side (debounced,
+// capped at 50 results) instead of being loaded up front.
 function MedicineSelect({
-  value, onSelect, medicines,
-}: { value: string; onSelect: (med: Medicine) => void; medicines: Medicine[] }) {
+  value, onSelect,
+}: { value: string; onSelect: (med: Medicine) => void }) {
   const [open, setOpen]     = useState(false);
   const [search, setSearch] = useState("");
   const [pos, setPos]       = useState({ top: 0, left: 0, width: 0 });
+  const [filtered, setFiltered] = useState<Medicine[]>([]);
+  const [searching, setSearching] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  const filtered = search.trim()
-    ? medicines.filter(m => m.termName.toLowerCase().includes(search.toLowerCase()))
-    : medicines;
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      ipdService.searchMedicines(search.trim())
+        .then(r => { if (!cancelled) setFiltered(r.data.data.medicines || []); })
+        .catch(() => { if (!cancelled) setFiltered([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, search.trim() ? 250 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [open, search]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -273,7 +286,9 @@ function MedicineSelect({
             />
           </div>
           <div className="max-h-52 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {searching && filtered.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-400">Searching…</div>
+            ) : filtered.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-400">No medicines found</div>
             ) : filtered.map(m => (
               <div
@@ -305,7 +320,6 @@ export default function IpdPharmacy() {
 
   const [patient,   setPatient]   = useState<any>(null);
   const [bills,     setBills]     = useState<PharmBill[]>([]);
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [expanded,  setExpanded]  = useState<Set<string>>(new Set());
@@ -316,6 +330,8 @@ export default function IpdPharmacy() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnAmount, setReturnAmount] = useState("");
   const [savingReturn, setSavingReturn] = useState(false);
+  // Edit mode replaces the cumulative return total instead of adding to it
+  const [editingReturn, setEditingReturn] = useState(false);
 
   // Bill-level discount modal (tied to one pharmacy bill)
   const [discountBill, setDiscountBill] = useState<PharmBill | null>(null);
@@ -342,13 +358,11 @@ export default function IpdPharmacy() {
     Promise.all([
       ipdService.getPatient(id),
       ipdService.getPharmacyBills(id),
-      ipdService.getMedicines(true),
-    ]).then(([pr, br, mr]) => {
+    ]).then(([pr, br]) => {
       const loadedBills: PharmBill[] = br.data.data.bills || [];
       setPatient(pr.data.data);
       setBills(loadedBills);
       setExpanded(new Set(loadedBills.map(b => b._id)));
-      setMedicines(mr.data.data.medicines || []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -448,22 +462,60 @@ export default function IpdPharmacy() {
     } catch { toast.error("Failed to delete"); }
   };
 
+  const openEditReturn = () => {
+    setEditingReturn(true);
+    setReturnAmount(String(patient?.pharmacyReturn || 0));
+    setShowReturnModal(true);
+  };
+
+  const handleDeleteReturn = async () => {
+    if (!(await confirm({
+      title: "Delete pharmacy return?",
+      description: `The pharmacy return of ${fmt(patient?.pharmacyReturn || 0)} will be removed from this patient's bill.`,
+      confirmText: "Yes, delete",
+    }))) return;
+    try {
+      await ipdService.updatePatient(id!, { pharmacyReturn: 0 });
+      setPatient((p: any) => ({ ...p, pharmacyReturn: 0 }));
+      toast.success("Pharmacy return deleted");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to delete return");
+    }
+  };
+
+  const closeReturnModal = () => {
+    setShowReturnModal(false);
+    setReturnAmount("");
+    setEditingReturn(false);
+  };
+
   const handleReturnSubmit = async () => {
     const amount = parseFloat(returnAmount) || 0;
-    if (amount <= 0) return toast.error("Enter a valid return amount");
-    if (!(await confirm({
+    if (editingReturn) {
+      if (amount < 0) return toast.error("Return amount cannot be negative");
+    } else if (amount <= 0) {
+      return toast.error("Enter a valid return amount");
+    }
+    if (!(await confirm(editingReturn ? {
+      title: "Update pharmacy return?",
+      description: amount > 0
+        ? `Total pharmacy return will be changed from ${fmt(patient?.pharmacyReturn || 0)} to ${fmt(amount)}.`
+        : "The pharmacy return will be removed from this patient's bill.",
+      confirmText: "Yes, update",
+    } : {
       title: "Record pharmacy return?",
       description: `${fmt(amount)} will be deducted from this patient's total pharmacy charge.`,
       confirmText: "Yes, deduct",
     }))) return;
     setSavingReturn(true);
     try {
-      const newReturn = (patient?.pharmacyReturn || 0) + amount;
+      const newReturn = editingReturn ? amount : (patient?.pharmacyReturn || 0) + amount;
       await ipdService.updatePatient(id!, { pharmacyReturn: newReturn });
       setPatient((p: any) => ({ ...p, pharmacyReturn: newReturn }));
       setShowReturnModal(false);
       setReturnAmount("");
-      toast.success("Pharmacy return recorded");
+      toast.success(editingReturn ? "Pharmacy return updated" : "Pharmacy return recorded");
+      setEditingReturn(false);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to record return");
     } finally {
@@ -503,8 +555,7 @@ export default function IpdPharmacy() {
     if (!medForm.termName.trim()) return toast.error("Medicine name is required");
     setSavingMed(true);
     try {
-      const med = await ipdService.createMedicine({ ...medForm, mrp: parseFloat(medForm.mrp) || 0 });
-      setMedicines(prev => [...prev, med.data.data]);
+      await ipdService.createMedicine({ ...medForm, mrp: parseFloat(medForm.mrp) || 0 });
       setShowMedModal(false);
       setMedForm({ termName: "", unitName: "", packingPower: "", boxNo: "", mrp: "", isActive: true });
       toast.success("Medicine added to catalog");
@@ -539,7 +590,7 @@ export default function IpdPharmacy() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-            onClick={() => { setReturnAmount(""); setShowReturnModal(true); }}>
+            onClick={() => { setEditingReturn(false); setReturnAmount(""); setShowReturnModal(true); }}>
             <RotateCcw className="h-4 w-4" /> Pharmacy Return
           </Button>
           <Button variant="outline" className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
@@ -578,7 +629,17 @@ export default function IpdPharmacy() {
               <span className="text-xs text-gray-500 block">Total Pharmacy Charge</span>
               <span className="font-bold text-green-700">{fmt(totalPharmCharge)}</span>
               {pharmacyReturn > 0 && (
-                <span className="text-xs text-red-500 block">(-) Pharmacy Return: {fmt(pharmacyReturn)}</span>
+                <span className="text-xs text-red-500 flex items-center gap-1">
+                  (-) Pharmacy Return: {fmt(pharmacyReturn)}
+                  <button type="button" onClick={openEditReturn}
+                    className="text-blue-600 hover:underline font-medium ml-1">
+                    Edit
+                  </button>
+                  <button type="button" onClick={handleDeleteReturn}
+                    className="text-red-600 hover:underline font-medium">
+                    Delete
+                  </button>
+                </span>
               )}
             </div>
           </div>
@@ -627,7 +688,6 @@ export default function IpdPharmacy() {
                       <MedicineSelect
                         value={it.itemName}
                         onSelect={med => handleMedicineSelect(idx, med)}
-                        medicines={medicines}
                       />
                     </div>
                     <div className="col-span-4 space-y-1">
@@ -867,7 +927,17 @@ export default function IpdPharmacy() {
             <div className="text-right">
               <span className="text-2xl font-bold text-green-700 block">{fmt(totalPharmCharge)}</span>
               {pharmacyReturn > 0 && (
-                <span className="text-xs text-red-500 block">(-) Pharmacy Return: {fmt(pharmacyReturn)}</span>
+                <span className="text-xs text-red-500 flex items-center gap-1 justify-end">
+                  (-) Pharmacy Return: {fmt(pharmacyReturn)}
+                  <button type="button" onClick={openEditReturn}
+                    className="text-blue-600 hover:underline font-medium ml-1">
+                    Edit
+                  </button>
+                  <button type="button" onClick={handleDeleteReturn}
+                    className="text-red-600 hover:underline font-medium">
+                    Delete
+                  </button>
+                </span>
               )}
             </div>
           </CardContent>
@@ -952,15 +1022,15 @@ export default function IpdPharmacy() {
       </Dialog>
 
       {/* Pharmacy Return Modal */}
-      <Dialog open={showReturnModal} onOpenChange={open => { if (!open) { setShowReturnModal(false); setReturnAmount(""); } }}>
+      <Dialog open={showReturnModal} onOpenChange={open => { if (!open) closeReturnModal(); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-4 w-4 text-amber-500" /> Pharmacy Return
+              <RotateCcw className="h-4 w-4 text-amber-500" /> {editingReturn ? "Edit Pharmacy Return" : "Pharmacy Return"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-1 py-2">
-            <Label className="text-xs">Amount (₹) <span className="text-red-500">*</span></Label>
+            <Label className="text-xs">{editingReturn ? "Total Return Amount (₹)" : "Amount (₹)"} <span className="text-red-500">*</span></Label>
             <Input
               type="number"
               autoFocus
@@ -969,11 +1039,14 @@ export default function IpdPharmacy() {
               className="h-9 text-sm"
               placeholder="0.00"
             />
+            {editingReturn && (
+              <p className="text-xs text-gray-500">Replaces the current total return. Set to 0 to remove it.</p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowReturnModal(false); setReturnAmount(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={closeReturnModal}>Cancel</Button>
             <Button onClick={handleReturnSubmit} disabled={savingReturn} className="bg-amber-600 hover:bg-amber-700">
-              {savingReturn ? "Saving…" : "Deduct from Bill"}
+              {savingReturn ? "Saving…" : editingReturn ? "Update Return" : "Deduct from Bill"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -278,6 +278,28 @@ export default function IpdDischarge() {
     }
   };
 
+  const handleReverseDischarge = async () => {
+    if (!(await confirm({
+      title: "Reverse this discharge?",
+      description: "The patient goes back to Admitted, the discharge date is cleared and their last bed allotment is reopened. The discharge summary text is kept.",
+      confirmText: "Yes, reverse",
+      destructive: true,
+    }))) return;
+    setSaving(true);
+    try {
+      const [pr, asr] = await ipdService.reverseDischarge(id!)
+        .then(() => Promise.all([ipdService.getPatient(id!), ipdService.getBedAllotments(id!)]));
+      setPatient(pr.data.data);
+      setBedAllotments(asr.data.data.allotments || []);
+      setForm(f => ({ ...f, dischargeDate: todayStr(), dischargeTime: nowTimeStr() }));
+      toast.success("Discharge reversed — patient is admitted again");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to reverse discharge");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
   if (!patient) return <div className="flex items-center justify-center h-64 text-red-500">Patient not found</div>;
 
@@ -681,6 +703,16 @@ export default function IpdDischarge() {
         >
           {saving ? "Saving…" : "Save Note"}
         </Button>
+        {patient.status === "Discharged" && (
+          <Button
+            variant="outline"
+            onClick={handleReverseDischarge}
+            disabled={saving}
+            className="border-orange-300 text-orange-700 hover:bg-orange-50"
+          >
+            Reverse Discharge
+          </Button>
+        )}
         <Button
           onClick={() => handleSave(true)}
           disabled={saving || patient.status === "Discharged"}

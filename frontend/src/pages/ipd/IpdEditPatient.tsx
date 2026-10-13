@@ -141,6 +141,37 @@ export default function IpdEditPatient() {
     (!selectedDoc || normStr(d.name).includes(normStr(selectedDoc)))
   );
 
+  // Discharged → Admitted runs the same reversal as the Discharge page's
+  // "Reverse Discharge" button, immediately (not deferred to Save).
+  const handleStatusChange = async (v: string) => {
+    if (!(v === "Admitted" && form.status === "Discharged")) return set("status", v);
+    if (!(await confirm({
+      title: "Reverse this discharge?",
+      description: "The patient goes back to Admitted, the discharge date is cleared and their last bed allotment is reopened. The discharge summary text is kept.",
+      confirmText: "Yes, reverse",
+      destructive: true,
+    }))) return;
+    setSaving(true);
+    try {
+      const r = await ipdService.reverseDischarge(id!);
+      const p = r.data.data;
+      setForm((f: any) => ({
+        ...f,
+        status: p.status,
+        bedCategory: p.bedCategory,
+        bedNo: p.bedNo,
+        dischargeDate: undefined,
+        dischargeTime: undefined,
+        dischargeType: undefined,
+      }));
+      toast.success("Discharge reversed — patient is admitted again");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to reverse discharge");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.name?.trim())  return toast.error("Patient name is required");
     if (!form.gender)        return toast.error("Gender is required");
@@ -232,7 +263,7 @@ export default function IpdEditPatient() {
             onClick={() => navigate(`/ipd/discharge/${id}`)}>
             <LogOut className="h-4 w-4" /> Discharge
           </Button>
-          <Select value={form.status || "Admitted"} onValueChange={v => set("status", v)}>
+          <Select value={form.status || "Admitted"} onValueChange={handleStatusChange} disabled={saving}>
             <SelectTrigger className={`h-9 w-36 text-sm font-medium border-2 ${
               form.status === "Admitted" ? "border-green-400 text-green-700" : "border-gray-300 text-gray-600"
             }`}>
