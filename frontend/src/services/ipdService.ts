@@ -335,6 +335,7 @@ const ipdService = {
   searchPatients: (params: any)=> api.get("/ipd/patients", { params }),
   getPatient:     (id: string) => api.get(`/ipd/patients/${id}`),
   updatePatient:  (id: string, data: any) => api.put(`/ipd/patients/${id}`, data),
+  reverseDischarge: (id: string) => api.post(`/ipd/patients/${id}/reverse-discharge`),
   deletePatient:  (id: string) => api.delete(`/ipd/patients/${id}`),
   getOccupiedBeds: ()          => api.get("/ipd/beds/occupied"),
 
@@ -406,6 +407,7 @@ const ipdService = {
   deletePharmacyBill: (id: string)                   => api.delete(`/ipd/pharmacy/bill/${id}`),
   // Medicine Catalog
   getMedicines:    (all = false) => api.get("/ipd/pharmacy-medicines", { params: all ? { all: "1" } : {} }),
+  searchMedicines: (q: string, limit = 50) => api.get("/ipd/pharmacy-medicines", { params: { q, limit } }),
   createMedicine:  (data: any)   => api.post("/ipd/pharmacy-medicines", data),
   updateMedicine:  (id: string, data: any) => api.put(`/ipd/pharmacy-medicines/${id}`, data),
   deleteMedicine:  (id: string)  => api.delete(`/ipd/pharmacy-medicines/${id}`),

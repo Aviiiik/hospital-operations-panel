@@ -166,10 +166,67 @@ export async function getIpdPatient(id: string) {
 
 export async function updateIpdPatient(id: string, data: any) {
   const { admissionId, ...safeData } = data;
+
+  // Discharged → Admitted (e.g. the status select on the edit page) must go
+  // through the full reversal, not just flip the status field — otherwise the
+  // discharge date stays set and the bed allotment stays closed.
+  if (safeData.status === "Admitted") {
+    const current = await IpdPatient.findById(id).select("status").lean() as any;
+    if (current?.status === "Discharged") {
+      await reverseDischarge(id);
+      const { status, dischargeDate, dischargeTime, dischargeType, ...rest } = safeData;
+      if (Object.keys(rest).length === 0) return IpdPatient.findById(id).lean();
+      return IpdPatient.findByIdAndUpdate(id, { $set: rest }, { new: true, runValidators: true }).lean();
+    }
+  }
+
   return IpdPatient.findByIdAndUpdate(
     id,
     { $set: safeData },
     { new: true, runValidators: true }
+  ).lean();
+}
+
+// Undo a discharge: back to "Admitted", discharge date/time/type cleared, and
+// the bed allotment(s) closed at discharge reopened so bed days accrue again.
+// Discharge-summary text (diagnosis, advice, …) is kept. Refuses if the
+// patient's bed has since been given to another admitted patient.
+export async function reverseDischarge(id: string) {
+  const patient = await IpdPatient.findById(id).lean() as any;
+  if (!patient) throw new Error("Patient not found");
+  if (patient.status !== "Discharged") throw new Error("Patient is not discharged");
+
+  const allotments = await IpdBedAllotment.find({ patientId: patient._id })
+    .sort({ allotmentDate: 1, createdAt: 1 }).lean() as any[];
+  const last = allotments[allotments.length - 1];
+
+  const bedCategory = last?.bedCategory ?? patient.bedCategory;
+  const bedNo       = last?.bedNo       ?? patient.bedNo;
+  if (bedNo) {
+    const occupant = await IpdPatient.findOne({
+      _id: { $ne: patient._id }, status: "Admitted", bedCategory, bedNo,
+    }).select("name admissionId").lean() as any;
+    if (occupant) {
+      throw new Error(`Bed ${bedCategory} ${bedNo} is now occupied by ${occupant.name} (${occupant.admissionId}) — shift that patient or allot a different bed first`);
+    }
+  }
+
+  // Discharge closes every open allotment at the discharge date/time; only the
+  // latest one was actually open, so that's the one to reopen.
+  if (last?.endDate) {
+    await IpdBedAllotment.updateOne(
+      { _id: last._id },
+      { $set: { isCurrent: true }, $unset: { endDate: 1, endTime: 1, effectiveEndTime: 1 } }
+    );
+  }
+
+  return IpdPatient.findByIdAndUpdate(
+    id,
+    {
+      $set:   { status: "Admitted", ...(bedNo ? { bedCategory, bedNo } : {}) },
+      $unset: { dischargeDate: 1, dischargeTime: 1, dischargeType: 1 },
+    },
+    { new: true }
   ).lean();
 }
 
@@ -925,9 +982,15 @@ export async function getPharmacyTotal(patientId: string) {
 
 // ─── Pharmacy Medicine Catalog ────────────────────────────────────────────────
 
-export async function getMedicines(activeOnly = true) {
+// The catalogue is ~15k rows, so the bill form searches it server-side
+// (`search` + `limit`) instead of downloading the whole list on page load.
+export async function getMedicines(activeOnly = true, search = "", limit = 0) {
   const filter: any = activeOnly ? { isActive: true } : {};
-  return PharmacyMedicine.find(filter).sort({ termName: 1 }).lean();
+  const term = search.trim();
+  if (term) filter.termName = { $regex: term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+  const q = PharmacyMedicine.find(filter).sort({ termName: 1 });
+  if (limit > 0) q.limit(limit);
+  return q.lean();
 }
 
 export async function createMedicine(data: any) {
